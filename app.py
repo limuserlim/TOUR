@@ -37,6 +37,7 @@ def get_sheets_client():
         return None
 
 st.set_page_config(layout="wide", page_title="מדריך טיולים עירוני", initial_sidebar_state="expanded")
+
 # --- רישום ה-PWA והזרקת המלצות התקנה בדפדפן ---
 pwa_script = """
 <link rel="manifest" href="/manifest.json">
@@ -440,7 +441,6 @@ with st.sidebar:
 
     st.markdown("---")
     is_planning = (st.session_state.work_mode == "מצב תכנון")
-    
     city_input_val = st.text_input(
         "לאן מטיילים? (עיר, מדינה):",
         value=st.session_state.current_city,
@@ -448,7 +448,7 @@ with st.sidebar:
         key="city_text_input_key",
         on_change=handle_city_change
     )
-
+    
     if is_planning:
         if st.button("טען יעד 🌍", use_container_width=True):
             handle_city_change()
@@ -630,8 +630,7 @@ if st.session_state.force_offline:
 
 st.subheader(f"🌐 יעד פעיל: {st.session_state.current_city} | 🛠️ תצורת עבודה: {st.session_state.work_mode}")
 
-if is_planning:
-   # --- רכיב המפה ---
+# --- רכיב המפה ---
 def render_map_section(full_main_spots):
     route_names = st.session_state.optimized_route_names if st.session_state.is_optimized else [n for n in st.session_state.selected_spots_names if n in [s["name"] for s in full_main_spots]]
     route_data = [next(s for s in full_main_spots if s["name"] == n) for n in route_names if any(s["name"] == n for s in full_main_spots)]
