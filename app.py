@@ -631,9 +631,7 @@ if st.session_state.force_offline:
 st.subheader(f"🌐 יעד פעיל: {st.session_state.current_city} | 🛠️ תצורת עבודה: {st.session_state.work_mode}")
 
 if is_planning:
-    st.info("💡 טיפ למצב תכנון: לחצי קליק בודד על כל נקודה אקראית במפה כדי לפתוח את חלון ההוספה המהיר.")
-
-# --- רכיב המפה ---
+   # --- רכיב המפה ---
 def render_map_section(full_main_spots):
     route_names = st.session_state.optimized_route_names if st.session_state.is_optimized else [n for n in st.session_state.selected_spots_names if n in [s["name"] for s in full_main_spots]]
     route_data = [next(s for s in full_main_spots if s["name"] == n) for n in route_names if any(s["name"] == n for s in full_main_spots)]
