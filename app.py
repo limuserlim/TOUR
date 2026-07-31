@@ -89,6 +89,7 @@ def find_file_id(service):
     return items[0]['id'] if items else None
 
 def save_custom_spot_to_db(city, spot):
+    """שמירת נקודה אישית ב-Google Sheets (נכס 1 שנעלם)"""
     if st.session_state.get('force_offline', False):
         return
     client = get_sheets_client()
@@ -96,7 +97,7 @@ def save_custom_spot_to_db(city, spot):
     try:
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         existing_records = sheet.get_all_records()
-        if any(r['name'] == spot['name'] and r['city'] == city for r in existing_records):
+        if any(r.get('name') == spot['name'] and r.get('city') == city for r in existing_records):
             return 
         row_to_insert = [
             city,
@@ -106,7 +107,7 @@ def save_custom_spot_to_db(city, spot):
             spot["description"]
         ]
         sheet.append_row(row_to_insert)
-        st.success("✔️ הנקודה נשמרה בהצלחה ב-Google Sheets!")
+        st.toast("✔️ הנקודה נשמרה בהצלחה ב-Google Sheets!", icon="💾")
     except Exception as e:
         st.error(f"שגיאה בשמירה לטבלה: {e}")
 
@@ -120,19 +121,39 @@ def fetch_custom_spots(city):
         all_records = sheet.get_all_records()
         custom_spots = []
         for r in all_records:
-            if r['city'] == city:
+            if r.get('city') == city:
                 custom_spots.append({
                     "name": r["name"],
                     "coords": [float(r["lat"]), float(r["lng"])],
                     "description": r["description"],
                     "audio_text": f"הגעת אל {r['name']}",
-                    "image_url": None  # 🚫 ללא תמונת דיפולט
+                    "image_url": None
                 })
         return custom_spots
     except:
         return []
 
-# --- פונקציית ניווט רחובות מול OSRM (עם מנגנון זיכרון לשרידות ומהירות) ---
+# --- פונקציית חישוב מרחק גיאוגרפי (Haversine formula) ---
+def calculate_geodesic_distance(coord1, coord2):
+    """מחשבת מרחק בקילומטרים בין שתי קואורדינטות (נכס 2 שנעלם)"""
+    lat1, lon1 = coord1
+    lat2, lon2 = coord2
+    R = 6371.0 # רדיוס כדור הארץ בקילומטרים
+
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def calculate_route_total_distance(coords_list):
+    """מחשבת מרחק מסלול כולל בקילומטרים"""
+    total_dist = 0.0
+    for i in range(len(coords_list) - 1):
+        total_dist += calculate_geodesic_distance(coords_list[i], coords_list[i+1])
+    return total_dist
+
+# --- פונקציית ניווט רחובות מול OSRM (עם מנגנון Cache) ---
 def get_osrm_walking_segment(start_coords, end_coords):
     if st.session_state.get('force_offline', False):
         return [start_coords, end_coords]
@@ -163,7 +184,6 @@ def get_full_street_route(route_coords_list):
     if len(route_coords_list) < 2:
         return route_coords_list
         
-    # בדיקת Cache כדי למנוע קריאות רשת חוזרות בלולאה אינסופית
     cache_key = f"cached_route_{hash(str(route_coords_list))}"
     if cache_key in st.session_state:
         return st.session_state[cache_key]
@@ -179,7 +199,7 @@ def get_full_street_route(route_coords_list):
     st.session_state[cache_key] = full_path
     return full_path
 
-# --- פונקציה לייצור קובץ KML מתוך רשימת אתרי המסלול ---
+# --- פונקציה לייצור קובץ KML ---
 def generate_kml(city_name, route_spots):
     kml = ET.Element('kml', xmlns="http://www.opengis.net/kml/2.2")
     document = ET.SubElement(kml, 'Document')
@@ -429,10 +449,6 @@ def handle_city_change():
     st.session_state.restored_from_storage = False
     st.session_state.spots_combo_key += 1
 
-def calculate_stub_distance(coord1, coord2):
-    geom_dist = math.sqrt((coord1[0] - coord2[0])**2 + (coord1[1] - coord2[1])**2)
-    return (geom_dist / 0.001) * 100
-
 city_data = STANDARD_CITIES_DB.get(st.session_state.current_city, {"main_spots": [], "by_the_way": []})
 standard_main_spots = city_data["main_spots"]
 custom_main_spots = st.session_state.custom_spots_dict.get(st.session_state.current_city, [])
@@ -474,12 +490,12 @@ with st.sidebar:
 
     distance_to_target = 0
     if standard_main_spots:
-        distance_to_target = calculate_stub_distance(user_coords, standard_main_spots[0]["coords"]) / 1000
+        distance_to_target = calculate_geodesic_distance(user_coords, standard_main_spots[0]["coords"])
 
     chosen_mode = st.radio("בחר תצורת עבודה:", options=["מצב תכנון", "מצב טיול"], key="work_mode")
 
     if chosen_mode == "מצב טיול" and distance_to_target > 10:
-        st.error(f"🚨 המערכת זיהתה שאתה מרוחק מהיעד ({round(distance_to_target)} ק\"מ).")
+        st.error(f"🚨 המערכת זיהתה שאתה מרוחק מהיעד ({round(distance_to_target, 1)} ק\"מ).")
         st.warning("בשל המרחק מנקודת היעד, המערכת תעבוד בתצורת תכנון.")
         st.session_state.work_mode = "מצב תכנון"
         st.rerun()
@@ -530,7 +546,7 @@ with st.sidebar:
                             "coords": [simulated_lat, simulated_lng],
                             "description": f"<div style='direction: rtl; text-align: right;'><strong>{custom_name}</strong><p>נקודה אישית בכתובת: {custom_address}</p></div>",
                             "audio_text": f"הגעת אל {custom_name}",
-                            "image_url": None  # 🚫 ללא תמונת דיפולט
+                            "image_url": None
                         }
                         
                         st.session_state.custom_spots_dict[st.session_state.current_city].append(new_spot)
@@ -538,7 +554,7 @@ with st.sidebar:
                         save_custom_spot_to_db(st.session_state.current_city, new_spot)
                         
                         st.session_state.selected_spots_names.append(custom_name)
-                        st.success(f"✔️ הנקודה '{custom_name}' אותרה ונשמרה בדפדפן!")
+                        st.success(f"✔️ הנקודה '{custom_name}' אותרה ונשמרה!")
                         st.rerun()
 
     st.markdown("---")
@@ -605,7 +621,7 @@ with st.sidebar:
                 st.rerun()
 
     # =======================================================================
-    # 🗺️ כפתור ייצוא המסלול לקובץ KML (עבור Google Maps / Organic Maps)
+    # 🗺️ כפתור ייצוא המסלול לקובץ KML
     # =======================================================================
     if st.session_state.is_optimized and st.session_state.optimized_route_names:
         st.markdown("---")
@@ -729,16 +745,24 @@ def render_map_section(full_main_spots):
             )
         ).add_to(m_normal)
 
+    # 📊 חישוב והצגת מידע מרחקים על המסלול (נכס 2 שנעלם)
     if st.session_state.work_mode == "מצב טיול" and len(route_data) == 1 and st.session_state.user_live_location:
         start_coords = st.session_state.user_live_location
         end_coords = route_data[0]["coords"]
         
+        dist_km = calculate_geodesic_distance(start_coords, end_coords)
+        est_walk_time_min = int(round((dist_km / 4.5) * 60)) # חישוב זמן הליכה בקצב 4.5 ק"מ/שעה
+        
         street_route = get_osrm_walking_segment(start_coords, end_coords)
         folium.PolyLine(locations=street_route, color="red", weight=5, dash_array="5, 10").add_to(m_normal)
         folium.Marker(end_coords, tooltip=route_data[0]["name"]).add_to(m_normal)
-        info_container.info(f"🗺️ מציג מסלול ניווט ממיקומך הנוכחי אל **{route_data[0]['name']}**")
+        
+        info_container.info(f"🗺️ **מסלול ניווט ממיקומך אל {route_data[0]['name']}** | 📏 מרחק: **{round(dist_km, 2)} ק\"מ** | ⏱️ זמן הליכה משוער: **~{est_walk_time_min} דקות**")
     else:
         if route_coords:
+            total_dist_km = calculate_route_total_distance(route_coords)
+            total_walk_time_min = int(round((total_dist_km / 4.5) * 60))
+            
             street_route = get_full_street_route(route_coords)
             folium.PolyLine(locations=street_route, color="green" if st.session_state.is_optimized else "red", weight=5).add_to(m_normal)
             for idx, s in enumerate(route_data):
@@ -747,11 +771,12 @@ def render_map_section(full_main_spots):
                     folium.Marker(location=s["coords"], tooltip=s["name"], icon=folium.DivIcon(html=html, icon_size=(22,22), icon_anchor=(11,11))).add_to(m_normal)
                 else:
                     folium.Marker(s["coords"], tooltip=s["name"]).add_to(m_normal)
-    
+            
+            info_container.success(f"📊 **נתוני מסלול הטיול:** 📏 מרחק כולל: **{round(total_dist_km, 2)} ק\"מ** | ⏱️ זמן הליכה משוער: **~{total_walk_time_min} דקות** ({len(route_data)} תחנות)")
+
     add_by_the_way_markers(m_normal)
     
     with map_container:
-        # שימוש ב-returned_objects שממזער אירועי Rerun של המפה
         map_output = st_folium(m_normal, width=700, height=450, key="multi_city_map", returned_objects=["last_clicked"])
         
         if is_planning and map_output and map_output.get("last_clicked"):
@@ -785,11 +810,11 @@ def show_add_spot_dialog(coords):
                 "coords": coords,
                 "description": f"<div style='direction: rtl; text-align: right;'><strong>{click_name}</strong><p>נקודה אישית שנבחרה ישירות מתוך המפה.</p></div>",
                 "audio_text": f"הגעת אל {click_name}",
-                "image_url": None  # 🚫 ללא תמונת דיפולט
+                "image_url": None
             }
             st.session_state.custom_spots_dict[st.session_state.current_city].append(new_map_spot)
             save_spot_to_local_storage(st.session_state.current_city, new_map_spot)
-            save_custom_spot_to_db(st.session_state.current_city, new_map_spot)
+            save_custom_spot_to_db(st.session_state.current_city, new_map_spot) # שמירה ל-Google Sheets בדרייב
             st.session_state.selected_spots_names.append(click_name)
             
             st.session_state.show_dialog_trigger = False
@@ -810,7 +835,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         st.markdown(f"<h2 style='direction: rtl; text-align: right;'>{selected_spot_data['name']}</h2>", unsafe_allow_html=True)
         st.markdown(selected_spot_data["description"], unsafe_allow_html=True)
         
-        # 🖼️ בדיקה קפדנית: מציג תמונה רק אם הקישור קיים, אינו None ואינו ריק
         img_url = selected_spot_data.get("image_url")
         if img_url and str(img_url).strip():
             st.image(img_url, caption=selected_spot_data["name"], width=600)
