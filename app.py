@@ -6,6 +6,7 @@ import math
 import time
 import io
 import xml.etree.ElementTree as ET
+import requests
 
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
@@ -130,6 +131,54 @@ def fetch_custom_spots(city):
         return custom_spots
     except:
         return []
+
+# --- פונקציית ניווט רחובות מול OSRM (כולל Snap לנקודות מחוץ לרשת) ---
+def get_osrm_walking_segment(start_coords, end_coords):
+    """
+    מביאה מסלול הליכה ברחובות מ-start ל-end משרת OSRM.
+    אם היעד אינו ברשת (למשל אי בנהר), מושכת את נקודת ה-Snap הקרובה 
+    ומשלימה קו ישר מה-Snap אל היעד.
+    """
+    if st.session_state.get('force_offline', False):
+        return [start_coords, end_coords]
+        
+    url = f"http://router.project-osrm.org/route/v1/foot/{start_coords[1]},{start_coords[0]};{end_coords[1]},{end_coords[0]}?overview=full&geometries=geojson"
+    try:
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == "Ok" and data.get("routes"):
+                geometry = data["routes"][0]["geometry"]["coordinates"]
+                route_coords = [[lat, lng] for lng, lat in geometry]
+                
+                # בדיקת Snap של היעד
+                waypoints = data.get("waypoints", [])
+                if len(waypoints) >= 2:
+                    target_snap_lng, target_snap_lat = waypoints[1]["location"]
+                    snap_coords = [target_snap_lat, target_snap_lng]
+                    # אם ה-Snap שונה מהיעד הפיזי (למשל אי במים), מחברים קו ישר מה-Snap ליעד
+                    if math.sqrt((snap_coords[0]-end_coords[0])**2 + (snap_coords[1]-end_coords[1])**2) > 0.0001:
+                        route_coords.append(end_coords)
+                        
+                return route_coords
+    except Exception as e:
+        pass
+        
+    # Fallback אופליין/שגיאה: קו ישר
+    return [start_coords, end_coords]
+
+def get_full_street_route(route_coords_list):
+    """מקבלת רשימת קואורדינטות של התחנות ומחברת ביניהן במסלול רחובות רציף"""
+    if len(route_coords_list) < 2:
+        return route_coords_list
+    full_path = []
+    for i in range(len(route_coords_list) - 1):
+        segment = get_osrm_walking_segment(route_coords_list[i], route_coords_list[i+1])
+        if full_path and segment:
+            full_path.extend(segment[1:])
+        else:
+            full_path.extend(segment)
+    return full_path
 
 # --- פונקציה לייצור קובץ KML מתוך רשימת אתרי המסלול ---
 def generate_kml(city_name, route_spots):
@@ -688,12 +737,16 @@ def render_map_section(full_main_spots):
         start_coords = st.session_state.user_live_location
         end_coords = route_data[0]["coords"]
         
-        folium.PolyLine(locations=[start_coords, end_coords], color="red", weight=5, dash_array="5, 10").add_to(m_normal)
+        # ניווט רחובות ממיקום המשתמש אל היעד הבלעדי
+        street_route = get_osrm_walking_segment(start_coords, end_coords)
+        folium.PolyLine(locations=street_route, color="red", weight=5, dash_array="5, 10").add_to(m_normal)
         folium.Marker(end_coords, tooltip=route_data[0]["name"]).add_to(m_normal)
         info_container.info(f"🗺️ מציג מסלול ניווט ממיקומך הנוכחי אל **{route_data[0]['name']}**")
     else:
         if route_coords:
-            folium.PolyLine(locations=route_coords, color="green" if st.session_state.is_optimized else "red", weight=5).add_to(m_normal)
+            # ניווט רחובות מלא ברצף התחנות
+            street_route = get_full_street_route(route_coords)
+            folium.PolyLine(locations=street_route, color="green" if st.session_state.is_optimized else "red", weight=5).add_to(m_normal)
             for idx, s in enumerate(route_data):
                 if st.session_state.is_optimized:
                     html = f"""<div style="font-size: 12px; color: white; background-color: green; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-weight: bold; border: 2px solid white;">{idx+1}</div>"""
