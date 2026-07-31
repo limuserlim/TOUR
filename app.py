@@ -89,7 +89,7 @@ def find_file_id(service):
     return items[0]['id'] if items else None
 
 def save_custom_spot_to_db(city, spot):
-    """שמירת נקודה אישית ב-Google Sheets (נכס 1 שנעלם)"""
+    """שמירת נקודה אישית ב-Google Sheets"""
     if st.session_state.get('force_offline', False):
         return
     client = get_sheets_client()
@@ -135,10 +135,9 @@ def fetch_custom_spots(city):
 
 # --- פונקציית חישוב מרחק גיאוגרפי (Haversine formula) ---
 def calculate_geodesic_distance(coord1, coord2):
-    """מחשבת מרחק בקילומטרים בין שתי קואורדינטות (נכס 2 שנעלם)"""
     lat1, lon1 = coord1
     lat2, lon2 = coord2
-    R = 6371.0 # רדיוס כדור הארץ בקילומטרים
+    R = 6371.0 
 
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
@@ -147,13 +146,12 @@ def calculate_geodesic_distance(coord1, coord2):
     return R * c
 
 def calculate_route_total_distance(coords_list):
-    """מחשבת מרחק מסלול כולל בקילומטרים"""
     total_dist = 0.0
     for i in range(len(coords_list) - 1):
         total_dist += calculate_geodesic_distance(coords_list[i], coords_list[i+1])
     return total_dist
 
-# --- פונקציית ניווט רחובות מול OSRM (עם מנגנון Cache) ---
+# --- פונקציית ניווט רחובות מול OSRM ---
 def get_osrm_walking_segment(start_coords, end_coords):
     if st.session_state.get('force_offline', False):
         return [start_coords, end_coords]
@@ -411,11 +409,14 @@ if not st.session_state.restored_from_storage:
     storage_data = components.html(js_storage_script, height=0, width=0)
 
     if storage_data and isinstance(storage_data, dict) and storage_data.get("is_loaded"):
+        need_rerun = False
         if "custom_spots" in storage_data and storage_data["custom_spots"]:
             loaded_spots = storage_data["custom_spots"]
             if isinstance(loaded_spots, dict):
                 for city_name, spots_list in loaded_spots.items():
-                    st.session_state.custom_spots_dict[city_name] = spots_list
+                    if city_name not in st.session_state.custom_spots_dict or st.session_state.custom_spots_dict[city_name] != spots_list:
+                        st.session_state.custom_spots_dict[city_name] = spots_list
+                        need_rerun = True
 
         if "saved_route" in storage_data and storage_data["saved_route"]:
             saved_r = storage_data["saved_route"]
@@ -425,6 +426,8 @@ if not st.session_state.restored_from_storage:
                 st.session_state.is_optimized = True
         
         st.session_state.restored_from_storage = True
+        if need_rerun:
+            st.rerun()
 
 current_city = st.session_state.current_city
 if current_city not in st.session_state.custom_spots_dict:
@@ -449,10 +452,19 @@ def handle_city_change():
     st.session_state.restored_from_storage = False
     st.session_state.spots_combo_key += 1
 
+# --- בניית בריכת הנקודות המלאה (סטנדרטיות + אישיות) ---
 city_data = STANDARD_CITIES_DB.get(st.session_state.current_city, {"main_spots": [], "by_the_way": []})
 standard_main_spots = city_data["main_spots"]
 custom_main_spots = st.session_state.custom_spots_dict.get(st.session_state.current_city, [])
-full_main_spots_pool = standard_main_spots + custom_main_spots
+
+# איחוד נקודות ומניעת כפילויות שמות
+full_main_spots_pool = list(standard_main_spots)
+seen_names = {s["name"] for s in standard_main_spots}
+for spot in custom_main_spots:
+    if spot["name"] not in seen_names:
+        full_main_spots_pool.append(spot)
+        seen_names.add(spot["name"])
+
 active_btw_spots = city_data.get("by_the_way", [])
 
 # --- סרגל צד (Sidebar) ---
@@ -560,6 +572,7 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("📍 נקודות עניין ביעד (משולב)")
     
+    # הפקת רשימת כל השמות (סטנדרטיים + אישיים) בתיבת ה-multiselect
     options_list = [s["name"] for s in full_main_spots_pool]
     valid_defaults = [n for n in st.session_state.selected_spots_names if n in options_list]
 
@@ -745,13 +758,13 @@ def render_map_section(full_main_spots):
             )
         ).add_to(m_normal)
 
-    # 📊 חישוב והצגת מידע מרחקים על המסלול (נכס 2 שנעלם)
+    # 📊 חישוב והצגת מידע מרחקים על המסלול
     if st.session_state.work_mode == "מצב טיול" and len(route_data) == 1 and st.session_state.user_live_location:
         start_coords = st.session_state.user_live_location
         end_coords = route_data[0]["coords"]
         
         dist_km = calculate_geodesic_distance(start_coords, end_coords)
-        est_walk_time_min = int(round((dist_km / 4.5) * 60)) # חישוב זמן הליכה בקצב 4.5 ק"מ/שעה
+        est_walk_time_min = int(round((dist_km / 4.5) * 60))
         
         street_route = get_osrm_walking_segment(start_coords, end_coords)
         folium.PolyLine(locations=street_route, color="red", weight=5, dash_array="5, 10").add_to(m_normal)
@@ -814,7 +827,7 @@ def show_add_spot_dialog(coords):
             }
             st.session_state.custom_spots_dict[st.session_state.current_city].append(new_map_spot)
             save_spot_to_local_storage(st.session_state.current_city, new_map_spot)
-            save_custom_spot_to_db(st.session_state.current_city, new_map_spot) # שמירה ל-Google Sheets בדרייב
+            save_custom_spot_to_db(st.session_state.current_city, new_map_spot)
             st.session_state.selected_spots_names.append(click_name)
             
             st.session_state.show_dialog_trigger = False
