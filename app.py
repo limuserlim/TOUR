@@ -161,7 +161,7 @@ def fetch_saved_routes_from_db(city):
     except Exception as e:
         return {}
 
-# --- פונקציות מרחק וניווט רחובות OSRM ---
+# --- פונקציות מרחק, ניווט רחובות OSRM ואופטימיזציית מסלול ---
 def calculate_geodesic_distance(coord1, coord2):
     lat1, lon1 = coord1
     lat2, lon2 = coord2
@@ -172,6 +172,26 @@ def calculate_geodesic_distance(coord1, coord2):
 
 def calculate_route_total_distance(coords_list):
     return sum(calculate_geodesic_distance(coords_list[i], coords_list[i+1]) for i in range(len(coords_list) - 1))
+
+def solve_tsp_nearest_neighbor(spots_list):
+    """מחשבת ומסדרת את התחנות בסדר הגיאוגרפי הקצר ביותר (Nearest Neighbor)"""
+    if len(spots_list) <= 2:
+        return spots_list
+    
+    unvisited = spots_list[1:].copy()
+    current = spots_list[0]
+    optimized_path = [current]
+    
+    while unvisited:
+        nearest = min(
+            unvisited, 
+            key=lambda spot: calculate_geodesic_distance(current["coords"], spot["coords"])
+        )
+        optimized_path.append(nearest)
+        unvisited.remove(nearest)
+        current = nearest
+        
+    return optimized_path
 
 def get_osrm_walking_segment(start_coords, end_coords):
     if st.session_state.get('force_offline', False): return [start_coords, end_coords]
@@ -399,7 +419,6 @@ with st.sidebar:
     options_list = [s["name"] for s in full_main_spots_pool]
     valid_defaults = [n for n in st.session_state.selected_spots_names if n in options_list]
 
-    # חיתוך בטוח של הדיפולט כדי למנוע את שגיאת StreamlitSelectionCountExceedsMaxError
     MAX_ALLOWED = 10
     safe_defaults = valid_defaults[:MAX_ALLOWED]
 
@@ -418,8 +437,24 @@ with st.sidebar:
             st.session_state.selected_spot_name = selected_spots[0]
         st.rerun()
 
+    # 🏃‍♂️ כפתור חישוב מסלול אופטימלי אמיתי
+    if len(st.session_state.selected_spots_names) > 1:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("חשב מסלול אופטימלי 🏃‍♂️", use_container_width=True):
+            selected_spot_objects = [
+                next(s for s in full_main_spots_pool if s["name"] == name)
+                for name in st.session_state.selected_spots_names
+                if any(s["name"] == name for s in full_main_spots_pool)
+            ]
+            optimized_objects = solve_tsp_nearest_neighbor(selected_spot_objects)
+            st.session_state.optimized_route_names = [s["name"] for s in optimized_objects]
+            st.session_state.is_optimized = True
+            st.toast("✔️ המסלול סודר מחדש בצורה האופטימלית ביותר!", icon="✨")
+            st.rerun()
+
     # 🗓️ ניהול ושמירת מסלולים לפי ימים
-    if is_planning and len(st.session_state.selected_spots_names) > 0:
+    active_route_to_save = st.session_state.optimized_route_names if st.session_state.is_optimized else st.session_state.selected_spots_names
+    if is_planning and len(active_route_to_save) > 0:
         st.markdown("---")
         st.subheader("🗓️ שמירת מסלול יומי")
         day_options = ["יום ראשון", "יום שני", "יום שלישי", "יום רביעי", "יום חמישי", "יום שישי", "יום שבת", "מסלול מותאם"]
@@ -432,8 +467,8 @@ with st.sidebar:
             final_route_name = selected_day_label
 
         if st.button(f"💾 שמור מסלול ל-{final_route_name}", use_container_width=True):
-            save_day_route_to_db(st.session_state.current_city, final_route_name, st.session_state.selected_spots_names)
-            st.session_state.saved_routes_dict[st.session_state.current_city][final_route_name] = st.session_state.selected_spots_names
+            save_day_route_to_db(st.session_state.current_city, final_route_name, active_route_to_save)
+            st.session_state.saved_routes_dict[st.session_state.current_city][final_route_name] = active_route_to_save
             st.rerun()
 
     # 📂 טעינת מסלול שמור
@@ -460,13 +495,6 @@ with st.sidebar:
 
     selected_btw = st.multiselect("הצג קטגוריות על המפה:", options=by_the_way_options, default=btw_default, disabled=is_btw_disabled, key=f"btw_multiselect_{st.session_state.spots_combo_key}")
     st.session_state.selected_by_the_way_types = selected_btw
-
-    if len(st.session_state.selected_spots_names) > 1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("חשב מסלול אופטימלי 🏃‍♂️", use_container_width=True):
-            st.session_state.optimized_route_names = st.session_state.selected_spots_names
-            st.session_state.is_optimized = True
-            st.rerun()
 
     # 📤 ייצוא KML
     if st.session_state.is_optimized and st.session_state.optimized_route_names:
