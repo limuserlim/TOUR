@@ -82,7 +82,7 @@ def get_drive_service():
         return None
 
 def save_custom_spot_to_db(city, spot):
-    """שמירת נקודה אישית ב-Google Sheets"""
+    """שמירת נקודה אישית ב-Google Sheets בענן"""
     if st.session_state.get('force_offline', False):
         return
     client = get_sheets_client()
@@ -91,14 +91,14 @@ def save_custom_spot_to_db(city, spot):
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         all_values = sheet.get_all_values()
         
-        # אם הגיליון ריק לגמרי, נוסיף שורת כותרות
+        # אם הגיליון ריק לחלוטין, ניצור כותרות
         if not all_values:
             sheet.append_row(["city", "name", "lat", "lng", "description"])
             all_values = [["city", "name", "lat", "lng", "description"]]
             
-        # מניעת כפילויות
+        # מניעת שמירת כפילויות
         for row in all_values[1:]:
-            if len(row) >= 2 and row[0] == city and row[1] == spot['name']:
+            if len(row) >= 2 and row[0].strip() == city.strip() and row[1].strip() == spot['name'].strip():
                 return 
 
         row_to_insert = [
@@ -114,7 +114,7 @@ def save_custom_spot_to_db(city, spot):
         st.error(f"שגיאה בשמירה לטבלה: {e}")
 
 def fetch_custom_spots(city):
-    """משיכת נקודות אישיות מ-Google Sheets בצורה עמידה לשגיאות"""
+    """משיכת נקודות אישיות מ-Google Sheets בצורה חסינת שגיאות"""
     if st.session_state.get('force_offline', False):
         return []
     client = get_sheets_client()
@@ -127,22 +127,27 @@ def fetch_custom_spots(city):
             return []
             
         custom_spots = []
-        # עוברים על השורות החל מהשורה השנייה (מדלגים על כותרות/שורה ראשונה)
+        # מעבר על השורות וחילוף ערכים לפי אינדקס עמודה בלבד
         for row in all_values[1:]:
-            if len(row) >= 4 and row[0] == city:
+            if len(row) >= 4 and row[0].strip() == city.strip():
                 try:
+                    lat_val = float(row[2].strip())
+                    lng_val = float(row[3].strip())
+                    spot_name = row[1].strip()
+                    desc_val = row[4].strip() if len(row) > 4 and row[4].strip() else f"<div style='direction: rtl; text-align: right;'><strong>{spot_name}</strong></div>"
+                    
                     custom_spots.append({
-                        "name": row[1],
-                        "coords": [float(row[2]), float(row[3])],
-                        "description": row[4] if len(row) > 4 else f"<div style='direction: rtl; text-align: right;'><strong>{row[1]}</strong></div>",
-                        "audio_text": f"הגעת אל {row[1]}",
+                        "name": spot_name,
+                        "coords": [lat_val, lng_val],
+                        "description": desc_val,
+                        "audio_text": f"הגעת אל {spot_name}",
                         "image_url": None
                     })
                 except (ValueError, TypeError):
                     continue
         return custom_spots
     except Exception as e:
-        st.warning(f"לא ניתן היה למשוך נקודות מהענן: {e}")
+        st.warning(f"לא ניתן היה למשוך נקודות מ-Google Sheets: {e}")
         return []
 
 # --- פונקציית חישוב מרחק גיאוגרפי (Haversine formula) ---
@@ -344,6 +349,16 @@ if 'force_offline' not in st.session_state: st.session_state.force_offline = Fal
 if 'restored_from_storage' not in st.session_state: st.session_state.restored_from_storage = False
 
 # =======================================================================
+# 🌐 טעינה ראשונית מ-Google Sheets עוד לפני בניית הממשק!
+# =======================================================================
+current_city = st.session_state.current_city
+
+if current_city not in st.session_state.custom_spots_dict or not st.session_state.custom_spots_dict[current_city]:
+    cloud_spots = fetch_custom_spots(current_city)
+    if cloud_spots:
+        st.session_state.custom_spots_dict[current_city] = cloud_spots
+
+# =======================================================================
 # 🌐 משיכת מיקום ה-GPS וכיוון המצפן מהדפדפן
 # =======================================================================
 js_geo_script = """
@@ -426,9 +441,15 @@ if not st.session_state.restored_from_storage:
             loaded_spots = storage_data["custom_spots"]
             if isinstance(loaded_spots, dict):
                 for city_name, spots_list in loaded_spots.items():
-                    if city_name not in st.session_state.custom_spots_dict or st.session_state.custom_spots_dict[city_name] != spots_list:
-                        st.session_state.custom_spots_dict[city_name] = spots_list
-                        need_rerun = True
+                    existing = st.session_state.custom_spots_dict.get(city_name, [])
+                    # מיזוג נקודות מה-LocalStorage ללא דריסת נקודות קיימות מהענן
+                    existing_names = {s["name"] for s in existing}
+                    for spot in spots_list:
+                        if spot["name"] not in existing_names:
+                            existing.append(spot)
+                            existing_names.add(spot["name"])
+                            need_rerun = True
+                    st.session_state.custom_spots_dict[city_name] = existing
 
         if "saved_route" in storage_data and storage_data["saved_route"]:
             saved_r = storage_data["saved_route"]
@@ -440,14 +461,6 @@ if not st.session_state.restored_from_storage:
         st.session_state.restored_from_storage = True
         if need_rerun:
             st.rerun()
-
-current_city = st.session_state.current_city
-
-# טעינה ראשונית מ-Google Sheets אם המאגר המקומי ריק
-if current_city not in st.session_state.custom_spots_dict or not st.session_state.custom_spots_dict[current_city]:
-    fetched = fetch_custom_spots(current_city)
-    if fetched:
-        st.session_state.custom_spots_dict[current_city] = fetched
 
 def handle_city_change():
     new_val = st.session_state.city_text_input_key
