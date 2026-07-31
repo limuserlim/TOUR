@@ -132,13 +132,8 @@ def fetch_custom_spots(city):
     except:
         return []
 
-# --- פונקציית ניווט רחובות מול OSRM (כולל Snap לנקודות מחוץ לרשת) ---
+# --- פונקציית ניווט רחובות מול OSRM (עם מנגנון זיכרון לשרידות ומהירות) ---
 def get_osrm_walking_segment(start_coords, end_coords):
-    """
-    מביאה מסלול הליכה ברחובות מ-start ל-end משרת OSRM.
-    אם היעד אינו ברשת (למשל אי בנהר), מושכת את נקודת ה-Snap הקרובה 
-    ומשלימה קו ישר מה-Snap אל היעד.
-    """
     if st.session_state.get('force_offline', False):
         return [start_coords, end_coords]
         
@@ -151,26 +146,28 @@ def get_osrm_walking_segment(start_coords, end_coords):
                 geometry = data["routes"][0]["geometry"]["coordinates"]
                 route_coords = [[lat, lng] for lng, lat in geometry]
                 
-                # בדיקת Snap של היעד
                 waypoints = data.get("waypoints", [])
                 if len(waypoints) >= 2:
                     target_snap_lng, target_snap_lat = waypoints[1]["location"]
                     snap_coords = [target_snap_lat, target_snap_lng]
-                    # אם ה-Snap שונה מהיעד הפיזי (למשל אי במים), מחברים קו ישר מה-Snap ליעד
                     if math.sqrt((snap_coords[0]-end_coords[0])**2 + (snap_coords[1]-end_coords[1])**2) > 0.0001:
                         route_coords.append(end_coords)
                         
                 return route_coords
-    except Exception as e:
+    except Exception:
         pass
         
-    # Fallback אופליין/שגיאה: קו ישר
     return [start_coords, end_coords]
 
 def get_full_street_route(route_coords_list):
-    """מקבלת רשימת קואורדינטות של התחנות ומחברת ביניהן במסלול רחובות רציף"""
     if len(route_coords_list) < 2:
         return route_coords_list
+        
+    # בדיקת Cache כדי למנוע קריאות רשת חוזרות בלולאה אינסופית
+    cache_key = f"cached_route_{hash(str(route_coords_list))}"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     full_path = []
     for i in range(len(route_coords_list) - 1):
         segment = get_osrm_walking_segment(route_coords_list[i], route_coords_list[i+1])
@@ -178,11 +175,12 @@ def get_full_street_route(route_coords_list):
             full_path.extend(segment[1:])
         else:
             full_path.extend(segment)
+            
+    st.session_state[cache_key] = full_path
     return full_path
 
 # --- פונקציה לייצור קובץ KML מתוך רשימת אתרי המסלול ---
 def generate_kml(city_name, route_spots):
-    """מייצרת מחרוזת XML בפורמט KML המתאימה לייבוא ל-Google Maps"""
     kml = ET.Element('kml', xmlns="http://www.opengis.net/kml/2.2")
     document = ET.SubElement(kml, 'Document')
     
@@ -192,7 +190,6 @@ def generate_kml(city_name, route_spots):
     doc_desc = ET.SubElement(document, 'description')
     doc_desc.text = "מסלול שחושב ונבנה באמצעות מדריך הטיולים העירוני"
 
-    # הוספת נקודות ציון (Placemarks)
     line_coords = []
     for idx, spot in enumerate(route_spots, start=1):
         lat, lng = spot['coords']
@@ -209,7 +206,6 @@ def generate_kml(city_name, route_spots):
         coordinates = ET.SubElement(point, 'coordinates')
         coordinates.text = f"{lng},{lat},0"
 
-    # הוספת קו המסלול (LineString)
     if len(line_coords) > 1:
         route_placemark = ET.SubElement(document, 'Placemark')
         r_name = ET.SubElement(route_placemark, 'name')
@@ -737,14 +733,12 @@ def render_map_section(full_main_spots):
         start_coords = st.session_state.user_live_location
         end_coords = route_data[0]["coords"]
         
-        # ניווט רחובות ממיקום המשתמש אל היעד הבלעדי
         street_route = get_osrm_walking_segment(start_coords, end_coords)
         folium.PolyLine(locations=street_route, color="red", weight=5, dash_array="5, 10").add_to(m_normal)
         folium.Marker(end_coords, tooltip=route_data[0]["name"]).add_to(m_normal)
         info_container.info(f"🗺️ מציג מסלול ניווט ממיקומך הנוכחי אל **{route_data[0]['name']}**")
     else:
         if route_coords:
-            # ניווט רחובות מלא ברצף התחנות
             street_route = get_full_street_route(route_coords)
             folium.PolyLine(locations=street_route, color="green" if st.session_state.is_optimized else "red", weight=5).add_to(m_normal)
             for idx, s in enumerate(route_data):
@@ -757,7 +751,8 @@ def render_map_section(full_main_spots):
     add_by_the_way_markers(m_normal)
     
     with map_container:
-        map_output = st_folium(m_normal, width=700, height=450, key="multi_city_map")
+        # שימוש ב-returned_objects שממזער אירועי Rerun של המפה
+        map_output = st_folium(m_normal, width=700, height=450, key="multi_city_map", returned_objects=["last_clicked"])
         
         if is_planning and map_output and map_output.get("last_clicked"):
             click_event = map_output["last_clicked"]
