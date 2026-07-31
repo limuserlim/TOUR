@@ -441,10 +441,11 @@ with st.sidebar:
     if len(st.session_state.selected_spots_names) > 1:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("חשב מסלול אופטימלי 🏃‍♂️", use_container_width=True):
+            spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
             selected_spot_objects = [
-                next(s for s in full_main_spots_pool if s["name"] == name)
+                spots_lookup[name.strip().lower()]
                 for name in st.session_state.selected_spots_names
-                if any(s["name"] == name for s in full_main_spots_pool)
+                if name.strip().lower() in spots_lookup
             ]
             optimized_objects = solve_tsp_nearest_neighbor(selected_spot_objects)
             st.session_state.optimized_route_names = [s["name"] for s in optimized_objects]
@@ -496,10 +497,15 @@ with st.sidebar:
     selected_btw = st.multiselect("הצג קטגוריות על המפה:", options=by_the_way_options, default=btw_default, disabled=is_btw_disabled, key=f"btw_multiselect_{st.session_state.spots_combo_key}")
     st.session_state.selected_by_the_way_types = selected_btw
 
-    # 📤 ייצוא KML
+    # 📤 ייצוא KML חסין שגיאות שמות
     if st.session_state.is_optimized and st.session_state.optimized_route_names:
         st.markdown("---")
-        active_route_spots = [next(s for s in full_main_spots_pool if s["name"] == name) for name in st.session_state.optimized_route_names if any(s["name"] == name for s in full_main_spots_pool)]
+        spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
+        active_route_spots = [
+            spots_lookup[name.strip().lower()] 
+            for name in st.session_state.optimized_route_names 
+            if name.strip().lower() in spots_lookup
+        ]
         kml_string = generate_kml(st.session_state.current_city, active_route_spots)
         st.download_button(label="🗺️ הורד קובץ KML ל-Google Maps", data=kml_string, file_name=f"route_{st.session_state.current_city.split(',')[0]}.kml", mime="application/vnd.google-earth.kml+xml", use_container_width=True)
 
@@ -508,16 +514,24 @@ st.title("מדריך טיולים עירוני - MVP")
 if st.session_state.force_offline: st.warning("✈️ **מצב אופליין יזום פעיל:** האפליקציה פועלת מתוך זיכרון המכשיר בלבד.")
 st.subheader(f"🌐 יעד פעיל: {st.session_state.current_city} | 🛠️ תצורת עבודה: {st.session_state.work_mode}")
 
-# --- רכיב המפה ---
+# --- רכיב המפה המעודכן והעמיד לשגיאות שמות ---
 def render_map_section(full_main_spots):
-    route_names = st.session_state.optimized_route_names if st.session_state.is_optimized else [n for n in st.session_state.selected_spots_names if n in [s["name"] for s in full_main_spots]]
-    route_data = [next(s for s in full_main_spots if s["name"] == n) for n in route_names if any(s["name"] == n for s in full_main_spots)]
+    route_names = st.session_state.optimized_route_names if st.session_state.is_optimized else st.session_state.selected_spots_names
+    spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots}
+    
+    route_data = []
+    for name in route_names:
+        clean_name = name.strip().lower()
+        if clean_name in spots_lookup:
+            route_data.append(spots_lookup[clean_name])
+            
     route_coords = [s["coords"] for s in route_data]
     
     center_coords = full_main_spots[0]["coords"] if full_main_spots else [0,0]
-    if st.session_state.selected_spot_name and any(s["name"] == st.session_state.selected_spot_name for s in full_main_spots):
-        current_spot = next((s for s in full_main_spots if s["name"] == st.session_state.selected_spot_name), None)
-        if current_spot: center_coords = current_spot["coords"]
+    if st.session_state.selected_spot_name:
+        clean_sel = st.session_state.selected_spot_name.strip().lower()
+        if clean_sel in spots_lookup:
+            center_coords = spots_lookup[clean_sel]["coords"]
 
     info_container, map_container = st.empty(), st.empty()
 
@@ -539,9 +553,19 @@ def render_map_section(full_main_spots):
             total_dist_km = calculate_route_total_distance(route_coords)
             street_route = get_full_street_route(route_coords)
             folium.PolyLine(locations=street_route, color="green" if st.session_state.is_optimized else "red", weight=5).add_to(m_normal)
-            for idx, s in enumerate(route_data):
-                html = f"""<div style="font-size: 12px; color: white; background-color: green; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-weight: bold; border: 2px solid white;">{idx+1}</div>""" if st.session_state.is_optimized else None
-                folium.Marker(location=s["coords"], tooltip=s["name"], icon=folium.DivIcon(html=html, icon_size=(22,22), icon_anchor=(11,11)) if html else None).add_to(m_normal)
+            
+            for idx, s in enumerate(route_data, start=1):
+                if st.session_state.is_optimized:
+                    html = f"""<div style="font-size: 12px; color: white; background-color: green; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-weight: bold; border: 2px solid white; box-shadow: 0px 2px 4px rgba(0,0,0,0.4);">{idx}</div>"""
+                    folium.Marker(
+                        location=s["coords"], 
+                        tooltip=f"{idx}. {s['name']}", 
+                        icon=folium.DivIcon(html=html, icon_size=(22,22), icon_anchor=(11,11)),
+                        z_index_offset=1000 - idx
+                    ).add_to(m_normal)
+                else:
+                    folium.Marker(s["coords"], tooltip=f"{idx}. {s['name']}").add_to(m_normal)
+                    
             info_container.success(f"📊 **נתוני מסלול:** 📏 מרחק כולל: **{round(total_dist_km, 2)} ק\"מ** | ⏱️ זמן הליכה משוער: **~{int(round((total_dist_km/4.5)*60))} דקות** ({len(route_data)} תחנות)")
 
     for btw_spot in active_btw_spots:
@@ -583,7 +607,10 @@ if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords
 
 # --- הצגת התוכן והמדריך הקולי ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
-    selected_spot_data = next((spot for spot in full_main_spots_pool if spot["name"] == st.session_state.selected_spot_name), None)
+    spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
+    clean_sel = st.session_state.selected_spot_name.strip().lower()
+    selected_spot_data = spots_lookup.get(clean_sel)
+    
     if selected_spot_data:
         st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown(f"<h2 style='direction: rtl; text-align: right;'>{selected_spot_data['name']}</h2>", unsafe_allow_html=True)
