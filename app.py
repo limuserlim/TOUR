@@ -114,7 +114,7 @@ def save_custom_spot_to_db(city, spot):
         st.error(f"שגיאה בשמירה לטבלה: {e}")
 
 def fetch_custom_spots(city):
-    """משיכת נקודות אישיות מ-Google Sheets בצורה חסינת שגיאות"""
+    """משיכת נקודות אישיות מ-Google Sheets בצורה חסינה למגרעות טקסט/רווחים"""
     if st.session_state.get('force_offline', False):
         return []
     client = get_sheets_client()
@@ -127,24 +127,27 @@ def fetch_custom_spots(city):
             return []
             
         custom_spots = []
-        # מעבר על השורות וחילוף ערכים לפי אינדקס עמודה בלבד
+        target_city_clean = city.strip().lower()
+        
         for row in all_values[1:]:
-            if len(row) >= 4 and row[0].strip() == city.strip():
-                try:
-                    lat_val = float(row[2].strip())
-                    lng_val = float(row[3].strip())
-                    spot_name = row[1].strip()
-                    desc_val = row[4].strip() if len(row) > 4 and row[4].strip() else f"<div style='direction: rtl; text-align: right;'><strong>{spot_name}</strong></div>"
-                    
-                    custom_spots.append({
-                        "name": spot_name,
-                        "coords": [lat_val, lng_val],
-                        "description": desc_val,
-                        "audio_text": f"הגעת אל {spot_name}",
-                        "image_url": None
-                    })
-                except (ValueError, TypeError):
-                    continue
+            if len(row) >= 4:
+                row_city = row[0].strip().lower()
+                if row_city in target_city_clean or target_city_clean in row_city:
+                    try:
+                        lat_val = float(row[2].strip())
+                        lng_val = float(row[3].strip())
+                        spot_name = row[1].strip()
+                        desc_val = row[4].strip() if len(row) > 4 and row[4].strip() else f"<div style='direction: rtl; text-align: right;'><strong>{spot_name}</strong></div>"
+                        
+                        custom_spots.append({
+                            "name": spot_name,
+                            "coords": [lat_val, lng_val],
+                            "description": desc_val,
+                            "audio_text": f"הגעת אל {spot_name}",
+                            "image_url": None
+                        })
+                    except (ValueError, TypeError):
+                        continue
         return custom_spots
     except Exception as e:
         st.warning(f"לא ניתן היה למשוך נקודות מ-Google Sheets: {e}")
@@ -349,7 +352,7 @@ if 'force_offline' not in st.session_state: st.session_state.force_offline = Fal
 if 'restored_from_storage' not in st.session_state: st.session_state.restored_from_storage = False
 
 # =======================================================================
-# 🌐 טעינה ראשונית מ-Google Sheets עוד לפני בניית הממשק!
+# 🌐 טעינה ראשונית מ-Google Sheets (לפני בניית הממשק וה-Multiselect!)
 # =======================================================================
 current_city = st.session_state.current_city
 
@@ -442,7 +445,6 @@ if not st.session_state.restored_from_storage:
             if isinstance(loaded_spots, dict):
                 for city_name, spots_list in loaded_spots.items():
                     existing = st.session_state.custom_spots_dict.get(city_name, [])
-                    # מיזוג נקודות מה-LocalStorage ללא דריסת נקודות קיימות מהענן
                     existing_names = {s["name"] for s in existing}
                     for spot in spots_list:
                         if spot["name"] not in existing_names:
