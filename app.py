@@ -48,7 +48,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =======================================================================
-# 💾 פונקציות שמירה וטעינה מ מ-Google Sheets (נקודות + מסלולים יומיים)
+# 💾 פונקציות שמירה וטעינה מ-Google Sheets (נקודות + מסלולים יומיים)
 # =======================================================================
 
 def save_custom_spot_to_db(city, spot):
@@ -120,7 +120,6 @@ def save_day_route_to_db(city, route_name, spots_list):
         all_values = sheet.get_all_values()
         spots_json_str = json.dumps(spots_list, ensure_ascii=False)
         
-        # אם המסלול ליום זה כבר קיים - נעדכן אותו
         for idx, row in enumerate(all_values[1:], start=2):
             if len(row) >= 2 and row[0].strip() == city.strip() and row[1].strip() == route_name.strip():
                 sheet.update_cell(idx, 3, spots_json_str)
@@ -400,11 +399,15 @@ with st.sidebar:
     options_list = [s["name"] for s in full_main_spots_pool]
     valid_defaults = [n for n in st.session_state.selected_spots_names if n in options_list]
 
+    # חיתוך בטוח של הדיפולט כדי למנוע את שגיאת StreamlitSelectionCountExceedsMaxError
+    MAX_ALLOWED = 10
+    safe_defaults = valid_defaults[:MAX_ALLOWED]
+
     selected_spots = st.multiselect(
         "בחר אתרים למסלול:",
         options=options_list,
-        default=valid_defaults,
-        max_selections=6,
+        default=safe_defaults,
+        max_selections=MAX_ALLOWED,
         key=f"spots_multiselect_uid_{st.session_state.spots_combo_key}"
     )
     
@@ -415,9 +418,7 @@ with st.sidebar:
             st.session_state.selected_spot_name = selected_spots[0]
         st.rerun()
 
-    # =======================================================================
-    # 🗓️ חדש: ניהול ושמירת מסלולים לפי ימים!
-    # =======================================================================
+    # 🗓️ ניהול ושמירת מסלולים לפי ימים
     if is_planning and len(st.session_state.selected_spots_names) > 0:
         st.markdown("---")
         st.subheader("🗓️ שמירת מסלול יומי")
