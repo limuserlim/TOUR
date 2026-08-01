@@ -40,7 +40,7 @@ def generate_audio_text_with_llm(spot_name, city_name):
     """יוצר טקסט העשרה דינמי ומורחב למדריך קולי באמצעות Google Gemini"""
     try:
         # בדיקת מפתח
-        api_key = st.secrets.get("GEMINI_API_KEY")
+        api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key:
             st.error("🚨 תקלה: מפתח GEMINI_API_KEY אינו מוגדר כלל ב-Streamlit Secrets!")
             return f"שגיאה: אין מפתח API."
