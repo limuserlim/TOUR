@@ -39,11 +39,14 @@ def get_sheets_client():
 def generate_audio_text_with_llm(spot_name, city_name):
     """יוצר טקסט העשרה דינמי ומורחב למדריך קולי באמצעות Google Gemini"""
     try:
+        # בדיקת מפתח
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
-            st.error("❌ מפתח GEMINI_API_KEY לא נמצא ב-Secrets!")
-            return f"הגעת אל {spot_name} ב{city_name}."
+            st.error("🚨 תקלה: מפתח GEMINI_API_KEY אינו מוגדר כלל ב-Streamlit Secrets!")
+            return f"שגיאה: אין מפתח API."
             
+        st.write("🔄 מתבצעת פנייה ל-Gemini API עבור:", spot_name)
+        
         client = genai.Client(api_key=api_key)
         
         prompt = (
@@ -58,17 +61,18 @@ def generate_audio_text_with_llm(spot_name, city_name):
             contents=prompt,
         )
         
-        raw_output = response.text.strip()
-        
-        # 🔍 בדיקה ויזואלית: מציג על המסך את מה שהמודל החזיר לפני כל עיבוד
-        st.write("🔍 **[DEBUG] תשובה גולמית מה-API:**", raw_output)
-        
-        return raw_output
-        
+        if response and response.text:
+            text_result = response.text.strip()
+            st.success("✅ התקבלה תשובה מלאה מה-LLM!")
+            return text_result
+        else:
+            st.warning("⚠️ התקבלה תשובה ריקה מהמודל.")
+            return f"שגיאה: תשובה ריקה."
+            
     except Exception as e:
-        st.error(f"שגיאת תקשורת מול Gemini API: {e}")
-        return f"ברוכים הבאים אל {spot_name}."
-
+        # מדפיס את השגיאה המדויקת על המסך במקום להבלע
+        st.error(f"❌ שגיאה קריטית בקריאה ל-Gemini: {str(e)}")
+        return f"שגיאה בהפקת תוכן: {str(e)}"
 st.set_page_config(layout="wide", page_title="מדריך טיולים עירוני", initial_sidebar_state="expanded")
 
 # --- רישום PWA והזרקת CSS (RTL) ---
