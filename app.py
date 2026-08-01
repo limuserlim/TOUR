@@ -25,6 +25,17 @@ from google import genai
 # --- הגדרות Google Sheets ---
 SPREADSHEET_ID = "17XwCMZnaXCr6049QYfCf33RoCzrEemQ70hYpccBEFQA"
 
+def get_sheets_client():
+    if st.session_state.get('force_offline', False):
+        return None
+    try:
+        info = st.secrets["gcs_connections"]
+        return gspread.service_account_from_dict(info)
+    except Exception as e:
+        if not st.session_state.get('force_offline', False):
+            st.error(f"שגיאה בהתחברות ל-Google Sheets: {e}")
+        return None
+
 def generate_audio_text_with_llm(spot_name, city_name):
     """יוצר טקסט העשרה דינמי למדריך קולי באמצעות Google Gemini"""
     try:
@@ -41,15 +52,14 @@ def generate_audio_text_with_llm(spot_name, city_name):
             f"התמקד בסיפור היסטורי מעניין או עובדה ייחודית, והימנע מציון עובדות יבשות או תגיות עיצוב. כתוב בעברית זורמת וטבעית."
         )
         
-        # שימוש במודל יציב ומוכר
+        # שימוש במודל פלאש יציב ומוכר
         response = client.models.generate_content(
-            model='gemini-2.5-flash', 
+            model='gemini-1.5-flash', 
             contents=prompt,
         )
         return response.text.strip()
         
     except Exception as e:
-        # הצגת השגיאה האמיתית על המסך כדי שנדע מה קרה בדיוק
         st.error(f"שגיאת תקשורת מול Gemini API: {e}")
         return f"ברוכים הבאים אל {spot_name}."
 
@@ -623,7 +633,6 @@ def show_add_spot_dialog(coords):
 if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords' in st.session_state:
     show_add_spot_dialog(st.session_state.last_clicked_coords)
 
-# --- הצגת התוכן והמדריך הקולי עם שילוב LLM ---
 # --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
@@ -647,10 +656,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # לוגיקה שמתבצעת בלחיצה או בדיקה: אם המשתמש לוחץ על כפתור ההשמעה, 
-        # נוודא קודם כל שאם זה טקסט בסיסי - נייצר אותו מול ה-LLM לפני שהדפדפן מקריא.
-        # מכיוון שכפתור ה-HTML מפעיל את ה-SpeechSynthesis בדפדפן, נייצר את טקסט ה-AI מראש ברמת פייתון.
-        
         col_audio, col_status = st.columns([2, 3])
         
         with col_audio:
