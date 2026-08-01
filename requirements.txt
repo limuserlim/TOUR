@@ -4,6 +4,8 @@ streamlit-folium
 geopy
 gspread
 google-api-python-client
+google-genai>=1.0.0
+pydantic>=2.0.0
 google-auth
 google-auth-httplib2
 google-auth-oauthlib
