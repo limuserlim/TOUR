@@ -643,8 +643,7 @@ def show_add_spot_dialog(coords):
 if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords' in st.session_state:
     show_add_spot_dialog(st.session_state.last_clicked_coords)
 
-# --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
-# --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
+# --- הצגת התוכן והמדריך הקולי (טקסט בעברית, קריינות באנגלית) ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
     clean_sel = st.session_state.selected_spot_name.strip().lower()
@@ -657,12 +656,14 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         if selected_spot_data.get("image_url"): 
             st.image(selected_spot_data["image_url"], caption=selected_spot_data["name"], width=600)
 
-        audio_key = f"audio_text_{selected_spot_data['name']}"
+        hebrew_text_key = f"hebrew_text_{selected_spot_data['name']}"
+        english_audio_key = f"english_audio_{selected_spot_data['name']}"
         is_generated_key = f"is_ai_generated_{selected_spot_data['name']}"
         
-        # אתחול ראשוני - אם טרם נוצר טקסט AI, נפעיל את ה-LLM אוטומטית או ניתן ברירת מחדל
-        if audio_key not in st.session_state:
-            st.session_state[audio_key] = selected_spot_data.get("audio_text", f"הגעת אל {selected_spot_data['name']}")
+        # אתחול ראשוני
+        if hebrew_text_key not in st.session_state:
+            st.session_state[hebrew_text_key] = selected_spot_data.get("audio_text", f"הגעת אל {selected_spot_data['name']}")
+            st.session_state[english_audio_key] = f"You have arrived at {selected_spot_data['name']}."
             st.session_state[is_generated_key] = False
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -670,35 +671,64 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         col_audio, col_status = st.columns([2, 3])
         
         with col_audio:
-            # כפתור שמפעיל מחדש ומייצר את התוכן הארוך מה-LLM
-            button_label = "🪄 צור מדריך קולי עשיר מחדש" if st.session_state[is_generated_key] else "🪄 הפעל מדריך קולי חכם (צור והשמע)"
+            button_label = "🪄 צור תוכן מחדש (עברית וקול באנגלית)" if st.session_state[is_generated_key] else "🪄 הפעל מדריך קולי חכם (צור והשמע)"
             if st.button(button_label, use_container_width=True):
-                with st.spinner("פונה ל-AI לייצור סיפור דרך מרתק ומלא..."):
-                    dynamic_text = generate_audio_text_with_llm(selected_spot_data['name'], st.session_state.current_city)
-                    st.session_state[audio_key] = dynamic_text
+                with st.spinner("פונה ל-AI לייצור טקסט בעברית וקריינות באנגלית...ရှင်..."):
+                    # 1. הפקת טקסט מפורט בעברית למסך
+                    prompt_he = (
+                        f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
+                        f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{selected_spot_data['name']}' בעיר '{st.session_state.current_city}'. "
+                        f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
+                        f"כתוב בעברית זורמת, סיפורית וטבעית, ללא תגיות עיצוב או כותרות מלאכותיות."
+                    )
+                    res_he = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_he)
+                    he_text = res_he.text.strip() if res_he and res_he.text else f"הגעת אל {selected_spot_data['name']}"
+
+                    # 2. הפקת טקסט באנגלית עבור הקריינות הקולית
+                    prompt_en = (
+                        f"You are a professional, warm, and engaging audio tour guide. "
+                        f"Write a rich, detailed, and engaging audio guide script about the site '{selected_spot_data['name']}' in '{st.session_state.current_city}' (about 2-3 short paragraphs). "
+                        f"Focus on history, interesting stories or legends, and notable architectural details. "
+                        f"Write in natural, fluent English suitable for audio narration, without any formatting tags or markdown."
+                    )
+                    res_en = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_en)
+                    en_text = res_en.text.strip() if res_en and res_en.text else f"You have arrived at {selected_spot_data['name']}."
+
+                    # שמירה בזיכרון
+                    st.session_state[hebrew_text_key] = he_text
+                    st.session_state[english_audio_key] = en_text
                     st.session_state[is_generated_key] = True
                     st.rerun()
 
-        current_audio_text = st.session_state[audio_key]
+        current_hebrew_text = st.session_state[hebrew_text_key]
+        current_english_audio = st.session_state[english_audio_key]
 
-        # נגן הקריינות של הדפדפן
+        # נגן הקריינות של הדפדפן מוגדר כעת על אנגלית (en-US) ומקריא את הטקסט באנגלית
         custom_audio_html = f"""
         <div style="direction: rtl; text-align: right;">
         <button id="audioGuideButton" style="background-color: #4CAF50; border: none; color: white; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 8px;">
-            השמע מדריך קולי 🔊
+            השמע מדריך קולי באנגלית 🔊
         </button>
         </div>
         <script>
             document.getElementById('audioGuideButton').addEventListener('click', () => {{
                 if ('speechSynthesis' in window) {{
                     window.speechSynthesis.cancel(); 
-                    var utterance = new SpeechSynthesisUtterance({json.dumps(current_audio_text)});
-                    utterance.lang = 'he-IL';
+                    var utterance = new SpeechSynthesisUtterance({json.dumps(current_english_audio)});
+                    utterance.lang = 'en-US';
                     window.speechSynthesis.speak(utterance);
                 }}
             }});
         </script>
         """
+        components.html(custom_audio_html, height=80, width=250)
+        
+        # הצגת הטקסט המפורט על המסך בעברית
+        st.markdown("---")
+        if st.session_state[is_generated_key]:
+            st.success(f"🤖 **תסריט המדריך הקולי (בעברית למסך):**\n\n{current_hebrew_text}")
+        else:
+            st.info(f"📁 **תסריט בסיסי:** {current_hebrew_text}\n\n*(לחץ על הכפתור למעלה כדי להפיק תוכן עשיר בעברית וקריינות באנגלית)*")
         components.html(custom_audio_html, height=80, width=250)
         
         # הצגת התוכן המלא והעשיר על המסך
