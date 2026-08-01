@@ -644,6 +644,7 @@ if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords
     show_add_spot_dialog(st.session_state.last_clicked_coords)
 
 # --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
+# --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
     clean_sel = st.session_state.selected_spot_name.strip().lower()
@@ -659,7 +660,7 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         audio_key = f"audio_text_{selected_spot_data['name']}"
         is_generated_key = f"is_ai_generated_{selected_spot_data['name']}"
         
-        # אתחול ראשוני
+        # אתחול ראשוני - אם טרם נוצר טקסט AI, נפעיל את ה-LLM אוטומטית או ניתן ברירת מחדל
         if audio_key not in st.session_state:
             st.session_state[audio_key] = selected_spot_data.get("audio_text", f"הגעת אל {selected_spot_data['name']}")
             st.session_state[is_generated_key] = False
@@ -669,14 +670,14 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         col_audio, col_status = st.columns([2, 3])
         
         with col_audio:
-            if not st.session_state[is_generated_key]:
-                if st.button("🪄 הפעל מדריך קולי חכם (צור והשמע)", use_container_width=True):
-                    with st.spinner("פונה ל-AI לייצור סיפור דרך מרתק..."):
-                        dynamic_text = generate_audio_text_with_llm(selected_spot_data['name'], st.session_state.current_city)
-                        st.session_state[audio_key] = dynamic_text
-                        st.session_state[is_generated_key] = True
-                        st.success("✔️ טקסט נוצר בהצלחה מ-Gemini!")
-                        st.rerun()
+            # כפתור שמפעיל מחדש ומייצר את התוכן הארוך מה-LLM
+            button_label = "🪄 צור מדריך קולי עשיר מחדש" if st.session_state[is_generated_key] else "🪄 הפעל מדריך קולי חכם (צור והשמע)"
+            if st.button(button_label, use_container_width=True):
+                with st.spinner("פונה ל-AI לייצור סיפור דרך מרתק ומלא..."):
+                    dynamic_text = generate_audio_text_with_llm(selected_spot_data['name'], st.session_state.current_city)
+                    st.session_state[audio_key] = dynamic_text
+                    st.session_state[is_generated_key] = True
+                    st.rerun()
 
         current_audio_text = st.session_state[audio_key]
 
@@ -700,8 +701,9 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         """
         components.html(custom_audio_html, height=80, width=250)
         
-        # הצגת אינדיקציה ברורה למקור הטקסט
+        # הצגת התוכן המלא והעשיר על המסך
+        st.markdown("---")
         if st.session_state[is_generated_key]:
-            st.success(f"🤖 **מקור הטקסט:** נוצר דינמית על ידי LLM (Gemini)\n\n📜 **תסריט:** {current_audio_text}")
+            st.success(f"🤖 **תסריט המדריך הקולי (נוצר על ידי AI):**\n\n{current_audio_text}")
         else:
-            st.info(f"📁 **מקור הטקסט:** ברירת מחדל בסיסית (לחץ על הכפתור מעלה כדי לייצר תוכן עשיר בעזרת AI)\n\n📜 **תסריט:** {current_audio_text}")
+            st.info(f"📁 **תסריט בסיסי:** {current_audio_text}\n\n*(לחץ על הכפתור למעלה כדי להפיק מדריך קולי עשיר בן מספר פסקאות)*")
