@@ -57,7 +57,7 @@ def generate_audio_text_with_llm(spot_name, city_name):
         )
         
         response = client.models.generate_content(
-            model='gemini-2.5-flash', 
+            model='gemini-3.5-flash', 
             contents=prompt,
         )
         
