@@ -630,6 +630,7 @@ if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords
     show_add_spot_dialog(st.session_state.last_clicked_coords)
 
 # --- הצגת התוכן והמדריך הקולי עם שילוב LLM ---
+# --- הצגת התוכן והמדריך הקולי עם כפתור השמעה חכם המשולב ב-LLM ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
     clean_sel = st.session_state.selected_spot_name.strip().lower()
@@ -642,24 +643,35 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         if selected_spot_data.get("image_url"): 
             st.image(selected_spot_data["image_url"], caption=selected_spot_data["name"], width=600)
 
-        # ניהול טקסט קריינות ייעודי בזיכרון לאתר הנבחר
         audio_key = f"audio_text_{selected_spot_data['name']}"
+        is_generated_key = f"is_ai_generated_{selected_spot_data['name']}"
+        
+        # אתחול ראשוני
         if audio_key not in st.session_state:
             st.session_state[audio_key] = selected_spot_data.get("audio_text", f"הגעת אל {selected_spot_data['name']}")
+            st.session_state[is_generated_key] = False
 
         st.markdown("<br>", unsafe_allow_html=True)
-        col_btn, col_info = st.columns([2, 3])
+
+        # לוגיקה שמתבצעת בלחיצה או בדיקה: אם המשתמש לוחץ על כפתור ההשמעה, 
+        # נוודא קודם כל שאם זה טקסט בסיסי - נייצר אותו מול ה-LLM לפני שהדפדפן מקריא.
+        # מכיוון שכפתור ה-HTML מפעיל את ה-SpeechSynthesis בדפדפן, נייצר את טקסט ה-AI מראש ברמת פייתון.
         
-        with col_btn:
-            if st.button("🪄 צור מדריך קולי חכם באמצעות AI", use_container_width=True):
-                with st.spinner("מייצר עבורך סיפור דרך מרתק..."):
-                    dynamic_text = generate_audio_text_with_llm(selected_spot_data['name'], st.session_state.current_city)
-                    st.session_state[audio_key] = dynamic_text
-                    st.success("המדריך הקולי נוצר בהצלחה!")
-                    st.rerun()
+        col_audio, col_status = st.columns([2, 3])
+        
+        with col_audio:
+            if not st.session_state[is_generated_key]:
+                if st.button("🪄 הפעל מדריך קולי חכם (צור והשמע)", use_container_width=True):
+                    with st.spinner("פונה ל-AI לייצור סיפור דרך מרתק..."):
+                        dynamic_text = generate_audio_text_with_llm(selected_spot_data['name'], st.session_state.current_city)
+                        st.session_state[audio_key] = dynamic_text
+                        st.session_state[is_generated_key] = True
+                        st.success("✔️ טקסט נוצר בהצלחה מ-Gemini!")
+                        st.rerun()
 
         current_audio_text = st.session_state[audio_key]
 
+        # נגן הקריינות של הדפדפן
         custom_audio_html = f"""
         <div style="direction: rtl; text-align: right;">
         <button id="audioGuideButton" style="background-color: #4CAF50; border: none; color: white; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 8px;">
@@ -679,5 +691,8 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         """
         components.html(custom_audio_html, height=80, width=250)
         
-        # הצגת תסריט הקריינות הנוכחי על המסך
-        st.info(f"📜 **תסריט הקריינות:** {current_audio_text}")
+        # הצגת אינדיקציה ברורה למקור הטקסט
+        if st.session_state[is_generated_key]:
+            st.success(f"🤖 **מקור הטקסט:** נוצר דינמית על ידי LLM (Gemini)\n\n📜 **תסריט:** {current_audio_text}")
+        else:
+            st.info(f"📁 **מקור הטקסט:** ברירת מחדל בסיסית (לחץ על הכפתור מעלה כדי לייצר תוכן עשיר בעזרת AI)\n\n📜 **תסריט:** {current_audio_text}")
