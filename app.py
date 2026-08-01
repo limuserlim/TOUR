@@ -30,6 +30,7 @@ def generate_audio_text_with_llm(spot_name, city_name):
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
+            st.error("❌ מפתח GEMINI_API_KEY לא נמצא ב-Secrets!")
             return f"הגעת אל {spot_name} ב{city_name}."
             
         client = genai.Client(api_key=api_key)
@@ -40,24 +41,17 @@ def generate_audio_text_with_llm(spot_name, city_name):
             f"התמקד בסיפור היסטורי מעניין או עובדה ייחודית, והימנע מציון עובדות יבשות או תגיות עיצוב. כתוב בעברית זורמת וטבעית."
         )
         
+        # שימוש במודל יציב ומוכר
         response = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=prompt,
         )
         return response.text.strip()
+        
     except Exception as e:
+        # הצגת השגיאה האמיתית על המסך כדי שנדע מה קרה בדיוק
+        st.error(f"שגיאת תקשורת מול Gemini API: {e}")
         return f"ברוכים הבאים אל {spot_name}."
-
-def get_sheets_client():
-    if st.session_state.get('force_offline', False):
-        return None
-    try:
-        info = st.secrets["gcs_connections"]
-        return gspread.service_account_from_dict(info)
-    except Exception as e:
-        if not st.session_state.get('force_offline', False):
-            st.error(f"שגיאה בהתחברות ל-Google Sheets: {e}")
-        return None
 
 st.set_page_config(layout="wide", page_title="מדריך טיולים עירוני", initial_sidebar_state="expanded")
 
