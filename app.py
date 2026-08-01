@@ -39,7 +39,6 @@ def get_sheets_client():
 def generate_audio_text_with_llm(spot_name, city_name):
     """יוצר טקסט העשרה דינמי ומורחב למדריך קולי באמצעות Google Gemini"""
     try:
-        # בדיקת מפתח
         api_key = st.secrets.get("GOOGLE_API_KEY")
         if not api_key:
             st.error("🚨 תקלה: מפתח GEMINI_API_KEY אינו מוגדר כלל ב-Streamlit Secrets!")
@@ -70,9 +69,9 @@ def generate_audio_text_with_llm(spot_name, city_name):
             return f"שגיאה: תשובה ריקה."
             
     except Exception as e:
-        # מדפיס את השגיאה המדויקת על המסך במקום להבלע
         st.error(f"❌ שגיאה קריטית בקריאה ל-Gemini: {str(e)}")
         return f"שגיאה בהפקת תוכן: {str(e)}"
+
 st.set_page_config(layout="wide", page_title="מדריך טיולים עירוני", initial_sidebar_state="expanded")
 
 # --- רישום PWA והזרקת CSS (RTL) ---
@@ -90,7 +89,6 @@ st.markdown("""
 # =======================================================================
 
 def save_custom_spot_to_db(city, spot):
-    """שמירת נקודה אישית ב-Google Sheets בענן"""
     if st.session_state.get('force_offline', False): return
     client = get_sheets_client()
     if not client: return
@@ -112,7 +110,6 @@ def save_custom_spot_to_db(city, spot):
         st.error(f"שגיאה בשמירה לטבלה: {e}")
 
 def fetch_custom_spots(city):
-    """משיכת נקודות אישיות מ-Google Sheets"""
     if st.session_state.get('force_offline', False): return []
     client = get_sheets_client()
     if not client: return []
@@ -143,7 +140,6 @@ def fetch_custom_spots(city):
         return []
 
 def save_day_route_to_db(city, route_name, spots_list):
-    """שמירת מסלול יומי בגיליון ה-Routes ב-Google Sheets"""
     if st.session_state.get('force_offline', False): return
     client = get_sheets_client()
     if not client: return
@@ -170,7 +166,6 @@ def save_day_route_to_db(city, route_name, spots_list):
         st.error(f"שגיאה בשמירת המסלול היומי: {e}")
 
 def fetch_saved_routes_from_db(city):
-    """משיכת כל המסלולים היומיים השמורים לעיר מ-Google Sheets"""
     if st.session_state.get('force_offline', False): return {}
     client = get_sheets_client()
     if not client: return {}
@@ -212,7 +207,6 @@ def calculate_route_total_distance(coords_list):
     return sum(calculate_geodesic_distance(coords_list[i], coords_list[i+1]) for i in range(len(coords_list) - 1))
 
 def solve_tsp_nearest_neighbor(spots_list):
-    """מחשבת ומסדרת את התחנות בסדר הגיאוגרפי הקצר ביותר (Nearest Neighbor)"""
     if len(spots_list) <= 2:
         return spots_list
     
@@ -417,7 +411,6 @@ with st.sidebar:
     if st.session_state.city_error and is_planning:
         st.error("⚠️ היעד לא זוהה! נסה 'רומא, איטליה' או 'בודפשט, הונגריה'.")
 
-    # ➕ הוספת נקודה אישית
     if is_planning:
         st.markdown("---")
         with st.expander("➕ הוסף נקודת עניין אישית"):
@@ -451,7 +444,6 @@ with st.sidebar:
                         st.success(f"✔️ הנקודה '{custom_name}' נשמרה!")
                         st.rerun()
 
-    # 📍 בחירת אתרים למסלול הנוכחי
     st.markdown("---")
     st.subheader("📍 נקודות עניין במסלול")
     options_list = [s["name"] for s in full_main_spots_pool]
@@ -475,7 +467,6 @@ with st.sidebar:
             st.session_state.selected_spot_name = selected_spots[0]
         st.rerun()
 
-    # 🏃‍♂️ כפתור חישוב מסלול אופטימלי אמיתי
     if len(st.session_state.selected_spots_names) > 1:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("חשב מסלול אופטימלי 🏃‍♂️", use_container_width=True):
@@ -491,7 +482,6 @@ with st.sidebar:
             st.toast("✔️ המסלול סודר מחדש בצורה האופטימלית ביותר!", icon="✨")
             st.rerun()
 
-    # 🗓️ ניהול ושמירת מסלולים לפי ימים
     active_route_to_save = st.session_state.optimized_route_names if st.session_state.is_optimized else st.session_state.selected_spots_names
     if is_planning and len(active_route_to_save) > 0:
         st.markdown("---")
@@ -510,7 +500,6 @@ with st.sidebar:
             st.session_state.saved_routes_dict[st.session_state.current_city][final_route_name] = active_route_to_save
             st.rerun()
 
-    # 📂 טעינת מסלול שמור
     city_saved_routes = st.session_state.saved_routes_dict.get(st.session_state.current_city, {})
     if city_saved_routes:
         st.markdown("---")
@@ -525,7 +514,6 @@ with st.sidebar:
                 st.success(f"המסלול '{route_to_load}' נטען בהצלחה!")
                 st.rerun()
 
-    # ☕ נקודות על הדרך
     st.markdown("---")
     st.subheader("☕ נקודות על הדרך")
     by_the_way_options = ["בית קפה", "מסעדה", "פארק", "שוק", "תחנת מטרו"]
@@ -535,7 +523,6 @@ with st.sidebar:
     selected_btw = st.multiselect("הצג קטגוריות על המפה:", options=by_the_way_options, default=btw_default, disabled=is_btw_disabled, key=f"btw_multiselect_{st.session_state.spots_combo_key}")
     st.session_state.selected_by_the_way_types = selected_btw
 
-    # 📤 ייצוא KML חסין שגיאות שמות
     if st.session_state.is_optimized and st.session_state.optimized_route_names:
         st.markdown("---")
         spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
@@ -552,7 +539,7 @@ st.title("מדריך טיולים עירוני - MVP")
 if st.session_state.force_offline: st.warning("✈️ **מצב אופליין יזום פעיל:** האפליקציה פועלת מתוך זיכרון המכשיר בלבד.")
 st.subheader(f"🌐 יעד פעיל: {st.session_state.current_city} | 🛠️ תצורת עבודה: {st.session_state.work_mode}")
 
-# --- רכיב המפה המעודכן והעמיד לשגיאות שמות ---
+# --- רכיב המפה ---
 def render_map_section(full_main_spots):
     route_names = st.session_state.optimized_route_names if st.session_state.is_optimized else st.session_state.selected_spots_names
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots}
@@ -643,7 +630,7 @@ def show_add_spot_dialog(coords):
 if is_planning and st.session_state.show_dialog_trigger and 'last_clicked_coords' in st.session_state:
     show_add_spot_dialog(st.session_state.last_clicked_coords)
 
-# --- הצגת התוכן והמדריך הקולי (טקסט בעברית, קריינות באנגלית) ---
+# --- הצגת התוכן והמדריך הקולי (טקסט בעברית למסך, קריינות באנגלית לקול) ---
 if full_main_spots_pool and st.session_state.selected_spot_name:
     spots_lookup = {s["name"].strip().lower(): s for s in full_main_spots_pool}
     clean_sel = st.session_state.selected_spot_name.strip().lower()
@@ -675,7 +662,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
             if st.button(button_label, use_container_width=True):
                 with st.spinner("פונה ל-AI לייצור טקסט בעברית וקריינות באנגלית..."):
                     try:
-                        # שליפת מפתח ואתחול ה-client באופן מקומי ובטוח
                         api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
                         client = genai.Client(api_key=api_key)
 
@@ -711,7 +697,7 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         current_hebrew_text = st.session_state[hebrew_text_key]
         current_english_audio = st.session_state[english_audio_key]
 
-        # נגן הקריינות של הדפדפן מוגדר כעת על אנגלית (en-US)
+        # נגן הקריינות של הדפדפן מוגדר על אנגלית (en-US)
         custom_audio_html = f"""
         <div style="direction: rtl; text-align: right;">
         <button id="audioGuideButton" style="background-color: #4CAF50; border: none; color: white; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 8px;">
@@ -737,19 +723,3 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
             st.success(f"🤖 **תסריט המדריך הקולי (בעברית למסך):**\n\n{current_hebrew_text}")
         else:
             st.info(f"📁 **תסריט בסיסי:** {current_hebrew_text}\n\n*(לחץ על הכפתור למעלה כדי להפיק תוכן עשיר בעברית וקריינות באנגלית)*")
-        components.html(custom_audio_html, height=80, width=250)
-        
-        # הצגת הטקסט המפורט על המסך בעברית
-        st.markdown("---")
-        if st.session_state[is_generated_key]:
-            st.success(f"🤖 **תסריט המדריך הקולי (בעברית למסך):**\n\n{current_hebrew_text}")
-        else:
-            st.info(f"📁 **תסריט בסיסי:** {current_hebrew_text}\n\n*(לחץ על הכפתור למעלה כדי להפיק תוכן עשיר בעברית וקריינות באנגלית)*")
-        components.html(custom_audio_html, height=80, width=250)
-        
-        # הצגת התוכן המלא והעשיר על המסך
-        st.markdown("---")
-        if st.session_state[is_generated_key]:
-            st.success(f"🤖 **תסריט המדריך הקולי (נוצר על ידי AI):**\n\n{current_audio_text}")
-        else:
-            st.info(f"📁 **תסריט בסיסי:** {current_audio_text}\n\n*(לחץ על הכפתור למעלה כדי להפיק מדריך קולי עשיר בן מספר פסקאות)*")
