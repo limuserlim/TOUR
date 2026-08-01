@@ -37,7 +37,7 @@ def get_sheets_client():
         return None
 
 def generate_audio_text_with_llm(spot_name, city_name):
-    """יוצר טקסט העשרה דינמי למדריך קולי באמצעות Google Gemini"""
+    """יוצר טקסט העשרה דינמי ומורחב למדריך קולי באמצעות Google Gemini"""
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
@@ -46,18 +46,23 @@ def generate_audio_text_with_llm(spot_name, city_name):
             
         client = genai.Client(api_key=api_key)
         
+        # שינוי ההנחיה כך שתדרוש מדריך מפורט, עשיר ומעניין יותר
         prompt = (
             f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
-            f"כתוב פסקה קצרה (3-4 משפטים בלבד) המיועדת להקראה קולית למטיילים על האתר '{spot_name}' בעיר '{city_name}'. "
-            f"התמקד בסיפור היסטורי מעניין או עובדה ייחודית, והימנע מציון עובדות יבשות או תגיות עיצוב. כתוב בעברית זורמת וטבעית."
+            f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות על האתר '{spot_name}' בעיר '{city_name}'. "
+            f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
+            f"כתוב בעברית זורמת, סיפורית וטבעית שנעים להקשיב לו, ללא תגיות עיצוב או כותרות מלאכותיות."
         )
         
-        # שימוש במודל פלאש יציב ומוכר
         response = client.models.generate_content(
             model='gemini-1.5-flash', 
             contents=prompt,
         )
         return response.text.strip()
+        
+    except Exception as e:
+        st.error(f"שגיאת תקשורת מול Gemini API: {e}")
+        return f"ברוכים הבאים אל {spot_name}."
         
     except Exception as e:
         st.error(f"שגיאת תקשורת מול Gemini API: {e}")
