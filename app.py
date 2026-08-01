@@ -46,23 +46,19 @@ def generate_audio_text_with_llm(spot_name, city_name):
             
         client = genai.Client(api_key=api_key)
         
-        # שינוי ההנחיה כך שתדרוש מדריך מפורט, עשיר ומעניין יותר
+        # הנחיה מפורטת ומורחבת לקבלת מדריך קולי עשיר בן 2-3 פסקאות
         prompt = (
             f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
-            f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות על האתר '{spot_name}' בעיר '{city_name}'. "
+            f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{spot_name}' בעיר '{city_name}'. "
             f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
             f"כתוב בעברית זורמת, סיפורית וטבעית שנעים להקשיב לו, ללא תגיות עיצוב או כותרות מלאכותיות."
         )
         
         response = client.models.generate_content(
-            model='gemini-1.5-flash', 
+            model='gemini-2.0-flash', 
             contents=prompt,
         )
         return response.text.strip()
-        
-    except Exception as e:
-        st.error(f"שגיאת תקשורת מול Gemini API: {e}")
-        return f"ברוכים הבאים אל {spot_name}."
         
     except Exception as e:
         st.error(f"שגיאת תקשורת מול Gemini API: {e}")
