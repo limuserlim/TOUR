@@ -218,15 +218,20 @@ def fetch_saved_routes_from_db(city):
 
         saved_routes = {}
         target_city_clean = city.strip().lower()
+        
         for row in all_values[1:]:
-            if len(row) >= 3:
+            # מוודאים שיש לפחות עיר, שם מסלול, ושעמודת ה-JSON (אינדקס 2) אינה ריקה לחלוטין
+            if len(row) >= 3 and row[0].strip() and row[1].strip() and row[2].strip():
                 row_city = row[0].strip().lower()
                 if row_city in target_city_clean or target_city_clean in row_city:
                     r_name = row[1].strip()
                     try:
-                        r_spots = json.loads(row[2])
-                        saved_routes[r_name] = r_spots
-                    except: continue
+                        r_spots = json.loads(row[2].strip())
+                        if isinstance(r_spots, list) and len(r_spots) > 0:
+                            saved_routes[r_name] = r_spots
+                    except Exception as parse_err:
+                        # מדפיס לדיבאגינג אם יש בעיית מבנה ב-JSON של אותו יום
+                        continue
         return saved_routes
     except Exception as e:
         return {}
