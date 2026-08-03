@@ -282,8 +282,31 @@ def generate_kml(city_name, route_spots):
 
     return ET.tostring(kml, encoding='utf-8', xml_declaration=True).decode('utf-8')
 
-# --- מאגר נתונים רב-עירוני סטנדרטי ---
+# --- מאגר נתונים רב-עירוני (כולל ערים בישראל ובעולם) ---
 STANDARD_CITIES_DB = {
+    "ירושלים, ישראל": {
+        "main_spots": [
+            {"name": "הכותל המערבי", "coords": [31.7767, 35.2345], "description": "<div style='direction: rtl; text-align: right;'><strong>הכותל המערבי</strong><p>שריד בית המקדש ואתר קדוש מרכזי.</p></div>", "audio_text": "ברוכים הבאים לכותל המערבי", "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Western_wall_2016.jpg/1024px-Western_wall_2016.jpg"},
+            {"name": "שוק מחנה יהודה", "coords": [31.7853, 35.2123], "description": "<div style='direction: rtl; text-align: right;'><strong>שוק מחנה יהודה</strong><p>השוק המפורסם והתוסס של ירושלים.</p></div>", "audio_text": "שוק מחנה יהודה", "image_url": None},
+            {"name": "מגדל דוד", "coords": [31.7761, 35.2285], "description": "<div style='direction: rtl; text-align: right;'><strong>מגדל דוד</strong><p>מוזיאון לתולדות ירושלים במצודה העתיקה.</p></div>", "audio_text": "מגדל דוד", "image_url": None}
+        ],
+        "by_the_way": [
+            {"name": "בית קפה - קפה קדוש", "type": "בית קפה", "coords": [31.7805, 35.2200]},
+            {"name": "מסעדה - מחניודה", "type": "מסעדה", "coords": [31.7850, 35.2120]},
+            {"name": "תחנת הרכבת הקלה - יפו / מרכז העיר", "type": "תחנת מטרו", "coords": [31.7820, 35.2180]}
+        ]
+    },
+    "תל אביב, ישראל": {
+        "main_spots": [
+            {"name": "טיילת תל אביב", "coords": [32.0772, 34.7648], "description": "<div style='direction: rtl; text-align: right;'><strong>טיילת תל אביב</strong><p>רצועת החוף המפורסמת של העיר.</p></div>", "audio_text": "ברוכים הבאים לטיילת תל אביב", "image_url": None},
+            {"name": "שוק הכרמל", "coords": [32.0682, 34.7694], "description": "<div style='direction: rtl; text-align: right;'><strong>שוק הכרמל</strong><p>השוק המרכזי והססגוני של תל אביב.</p></div>", "audio_text": "שוק הכרמל", "image_url": None},
+            {"name": "נמל יפו", "coords": [32.0526, 34.7508], "description": "<div style='direction: rtl; text-align: right;'><strong>נמל יפו</strong><p>אחד הנמלים העתיקים בעולם.</p></div>", "audio_text": "נמל יפו", "image_url": None}
+        ],
+        "by_the_way": [
+            {"name": "בית קפה - קפה נחת", "type": "בית קפה", "coords": [32.0780, 34.7740]},
+            {"name": "פארק - גן מאיר", "type": "פארק", "coords": [32.0725, 34.7720]}
+        ]
+    },
     "רומא, איטליה": {
         "main_spots": [
             {"name": "קולוסאום", "coords": [41.8902, 12.4922], "description": "<div style='direction: rtl; text-align: right;'><strong>קולוסאום</strong><p>האמפיתיאטרון הגדול בעולם.</p></div>", "audio_text": "ברוכים הבאים לקולוסאום", "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Colosseo_2020.jpg/1024px-Colosseo_2020.jpg"},
@@ -293,9 +316,7 @@ STANDARD_CITIES_DB = {
         "by_the_way": [
             {"name": "בית קפה - La Casa del Caffè", "type": "בית קפה", "coords": [41.8995, 12.4800]},
             {"name": "מסעדה - Pane e Salame", "type": "מסעדה", "coords": [41.9002, 12.4820]},
-            {"name": "פארק - Colle Oppio", "type": "פארק", "coords": [41.8915, 12.4960]},
-            {"name": "שוק - Mercato Campagna Amica", "type": "שוק", "coords": [41.8890, 12.4830]},
-            {"name": "תחנת מטרו - Colosseo Station", "type": "תחנת מטרו", "coords": [41.8912, 12.4915]}
+            {"name": "פארק - Colle Oppio", "type": "פארק", "coords": [41.8915, 12.4960]}
         ]
     },
     "בודפשט, הונגריה": {
@@ -306,10 +327,7 @@ STANDARD_CITIES_DB = {
         ],
         "by_the_way": [
             {"name": "בית קפה - Ruszwurm Cukrászda", "type": "בית קפה", "coords": [47.5015, 19.0325]},
-            {"name": "מסעדה - Hunter's Restaurant", "type": "מסעדה", "coords": [47.5065, 19.0430]},
-            {"name": "פארק - Elysium Park", "type": "פארק", "coords": [47.4980, 19.0370]},
-            {"name": "שוק - Central Market Hall", "type": "שוק", "coords": [47.4870, 19.0585]},
-            {"name": "תחנת מטרו - Batthyány tér Station", "type": "תחנת מטרו", "coords": [47.5060, 19.0390]}
+            {"name": "מסעדה - Hunter's Restaurant", "type": "מסעדה", "coords": [47.5065, 19.0430]}
         ]
     }
 }
@@ -347,14 +365,15 @@ if current_city not in st.session_state.saved_routes_dict:
     st.session_state.saved_routes_dict[current_city] = fetch_saved_routes_from_db(current_city)
 
 def handle_city_change():
-    new_val = st.session_state.city_text_input_key
-    if new_val in STANDARD_CITIES_DB:
+    new_val = st.session_state.city_text_input_key.strip()
+    if new_val:
         st.session_state.current_city = new_val
         st.session_state.city_error = False
         st.session_state.custom_spots_dict[new_val] = fetch_custom_spots(new_val)
         st.session_state.saved_routes_dict[new_val] = fetch_saved_routes_from_db(new_val)
     else:
         st.session_state.city_error = True
+        
     st.session_state.selected_spots_names = []
     st.session_state.selected_spot_name = ""
     st.session_state.is_optimized = False
@@ -409,7 +428,7 @@ with st.sidebar:
     st.text_input("לאן מטיילים? (עיר, מדינה):", value=st.session_state.current_city, disabled=not is_planning, key="city_text_input_key", on_change=handle_city_change)
     
     if st.session_state.city_error and is_planning:
-        st.error("⚠️ היעד לא זוהה! נסה 'רומא, איטליה' או 'בודפשט, הונגריה'.")
+        st.error("⚠️ היעד לא זוהה! אנא הקלד שם עיר תקין.")
 
     if is_planning:
         st.markdown("---")
