@@ -339,7 +339,7 @@ if 'selected_spots_names' not in st.session_state: st.session_state.selected_spo
 if 'selected_spot_name' not in st.session_state: st.session_state.selected_spot_name = ""
 if 'is_optimized' not in st.session_state: st.session_state.is_optimized = False
 if 'optimized_route_names' not in st.session_state: st.session_state.optimized_route_names = []
-if 'mock_gps_location' not in st.session_state: st.session_state.mock_gps_location = "נמצא ביעד (רומא/בודפשט)"
+if 'mock_gps_location' not in st.session_state: st.session_state.mock_gps_location = "נמצא ביעד"
 if 'sim_running' not in st.session_state: st.session_state.sim_running = False
 if 'work_mode' not in st.session_state: st.session_state.work_mode = "מצב תכנון"
 if 'spots_combo_key' not in st.session_state: st.session_state.spots_combo_key = 0
@@ -384,7 +384,7 @@ def handle_city_change():
     st.session_state.show_dialog_trigger = False
     st.session_state.spots_combo_key += 1
 
-# --- בניית בריכת הנקודות המלאה ---
+# --- בניית בריכת הנקודות המלאה עם הגנה על ערים חדשות ---
 city_data = STANDARD_CITIES_DB.get(st.session_state.current_city, {"main_spots": [], "by_the_way": []})
 standard_main_spots = city_data["main_spots"]
 custom_main_spots = st.session_state.custom_spots_dict.get(st.session_state.current_city, [])
@@ -407,9 +407,14 @@ with st.sidebar:
         st.session_state.force_offline = force_offline
         st.rerun()
 
-    mock_gps = st.selectbox("📍 סימולטור מיקום GPS:", options=["נמצא ביעד (רומא/בודפשט)", "מרוחק (ישראל)"])
+    mock_gps = st.selectbox("📍 סימולטור מיקום GPS:", options=["נמצא ביעד", "מרוחק (ישראל)"])
     st.session_state.mock_gps_location = mock_gps
-    user_coords = [32.0833, 34.8000] if mock_gps == "מרוחק (ישראל)" else ([47.4980, 19.0400] if st.session_state.current_city == "בודפשט, הונגריה" else [41.8910, 12.4900])
+    
+    default_coords = [32.0833, 34.8000]
+    if standard_main_spots:
+        default_coords = standard_main_spots[0]["coords"]
+        
+    user_coords = [32.0833, 34.8000] if mock_gps == "מרוחק (ישראל)" else default_coords
     st.session_state.user_live_location = user_coords
 
     st.session_state.user_heading = st.slider("🧩 סימולטור מצפן (מעלות):", 0, 360, int(st.session_state.get('user_heading', 0)))
@@ -417,7 +422,7 @@ with st.sidebar:
     distance_to_target = calculate_geodesic_distance(user_coords, standard_main_spots[0]["coords"]) if standard_main_spots else 0
     chosen_mode = st.radio("בחר תצורת עבודה:", options=["מצב תכנון", "מצב טיול"], key="work_mode")
 
-    if chosen_mode == "מצב טיול" and distance_to_target > 10:
+    if chosen_mode == "מצב טיול" and standard_main_spots and distance_to_target > 10:
         st.error(f"🚨 המערכת זיהתה שאתה מרוחק מהיעד ({round(distance_to_target, 1)} ק\"מ).")
         st.warning("בשל המרחק, המערכת תעבוד בתצורת תכנון.")
         st.session_state.work_mode = "מצב תכנון"
@@ -430,6 +435,17 @@ with st.sidebar:
     if st.session_state.city_error and is_planning:
         st.error("⚠️ היעד לא זוהה! אנא הקלד שם עיר תקין.")
 
+    # 🔍 פאנל אינדיקציה ויזואלי (Debug Panel)
+    st.markdown("---")
+    with st.expander("🛠️ מצב מערכת (Debug)"):
+        st.write(f"**יעד נוכחי:** {st.session_state.current_city}")
+        st.write(f"**אתרים סטטיים:** {len(standard_main_spots)}")
+        st.write(f"**נקודות אישיות בענן:** {len(custom_main_spots)}")
+        st.write(f"**סה\"כ בריכת נקודות:** {len(full_main_spots_pool)}")
+
+    if not standard_main_spots:
+        st.info("💡 זוהה יעד חדש! השתמש באפשרות למטה כדי להוסיף נקודות עניין ראשונות למסלול.")
+
     if is_planning:
         st.markdown("---")
         with st.expander("➕ הוסף נקודת עניין אישית"):
@@ -441,7 +457,7 @@ with st.sidebar:
                     if any(s["name"] == custom_name for s in full_main_spots_pool):
                         st.error("❌ שם זה כבר קיים במאגר!")
                     else:
-                        simulated_lat, simulated_lng = 47.4985, 19.0410
+                        simulated_lat, simulated_lng = default_coords[0], default_coords[1]
                         if not st.session_state.force_offline:
                             try:
                                 geolocator = Nominatim(user_agent="travel_app_sharon")
@@ -571,7 +587,7 @@ def render_map_section(full_main_spots):
             
     route_coords = [s["coords"] for s in route_data]
     
-    center_coords = full_main_spots[0]["coords"] if full_main_spots else [0,0]
+    center_coords = full_main_spots[0]["coords"] if full_main_spots else [32.0833, 34.8000]
     if st.session_state.selected_spot_name:
         clean_sel = st.session_state.selected_spot_name.strip().lower()
         if clean_sel in spots_lookup:
@@ -666,7 +682,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         english_audio_key = f"english_audio_{selected_spot_data['name']}"
         is_generated_key = f"is_ai_generated_{selected_spot_data['name']}"
         
-        # אתחול ראשוני
         if hebrew_text_key not in st.session_state:
             st.session_state[hebrew_text_key] = selected_spot_data.get("audio_text", f"הגעת אל {selected_spot_data['name']}")
             st.session_state[english_audio_key] = f"You have arrived at {selected_spot_data['name']}."
@@ -684,7 +699,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
                         api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
                         client = genai.Client(api_key=api_key)
 
-                        # 1. הפקת טקסט מפורט בעברית למסך
                         prompt_he = (
                             f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
                             f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{selected_spot_data['name']}' בעיר '{st.session_state.current_city}'. "
@@ -694,7 +708,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
                         res_he = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_he)
                         he_text = res_he.text.strip() if res_he and res_he.text else f"הגעת אל {selected_spot_data['name']}"
 
-                        # 2. הפקת טקסט באנגלית עבור הקריינות הקולית
                         prompt_en = (
                             f"You are a professional, warm, and engaging audio tour guide. "
                             f"Write a rich, detailed, and engaging audio guide script about the site '{selected_spot_data['name']}' in '{st.session_state.current_city}' (about 2-3 short paragraphs). "
@@ -704,7 +717,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
                         res_en = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_en)
                         en_text = res_en.text.strip() if res_en and res_en.text else f"You have arrived at {selected_spot_data['name']}."
 
-                        # שמירה בזיכרון
                         st.session_state[hebrew_text_key] = he_text
                         st.session_state[english_audio_key] = en_text
                         st.session_state[is_generated_key] = True
@@ -716,7 +728,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         current_hebrew_text = st.session_state[hebrew_text_key]
         current_english_audio = st.session_state[english_audio_key]
 
-        # נגן הקריינות של הדפדפן מוגדר על אנגלית (en-US)
         custom_audio_html = f"""
         <div style="direction: rtl; text-align: right;">
         <button id="audioGuideButton" style="background-color: #4CAF50; border: none; color: white; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 8px;">
@@ -736,7 +747,6 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
         """
         components.html(custom_audio_html, height=80, width=250)
         
-        # הצגת הטקסט המפורט על המסך בעברית
         st.markdown("---")
         if st.session_state[is_generated_key]:
             st.success(f"🤖 **תסריט המדריך הקולי (בעברית למסך):**\n\n{current_hebrew_text}")
