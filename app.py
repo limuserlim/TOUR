@@ -26,7 +26,7 @@ from google import genai
 SPREADSHEET_ID = "17XwCMZnaXCr6049QYfCf33RoCzrEemQ70hYpccBEFQA"
 
 def fetch_dynamic_city_spots(city_name):
-    """פונה ל-Gemini לקבלת אתרים דינמיים, עם מנגנון ניסיון חוזר (Retry) מורחב למקרה של עומס"""
+    """פונה ל-Gemini לקבלת אתרים דינמיים עם ניהול שגיאות חסון ומודל מהיר"""
     api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         return []
@@ -34,34 +34,51 @@ def fetch_dynamic_city_spots(city_name):
     client = genai.Client(api_key=api_key)
     
     prompt = (
-        f"החזר רשימה של 3 עד 5 אתרי חובה תיירותיים מרכזיים בעיר '{city_name}'. "
-        f"עבור כל אתר ציין את השם שלו ואת הקואורדינטות המשוערות (קו רוחב וקו אורך) שלו בעולם. "
-        f"החזר את התשובה **אך ורק** במבנה JSON תקין של רשימת אובייקטים, כך: "
-        f'[{{"name": "שם האתר", "coords": [lat, lng], "description": "<div style=\'direction: rtl; text-align: right;\'><strong>שם האתר</strong><p>תיאור קצר</p></div>", "audio_text": "טקסט ברוכים הבאים", "image_url": null}}]. '
-        f"אל תוסיף שום טקסט מעבר ל-JSON."
+        f"Return a JSON list of 3 to 5 must-see tourist attractions in '{city_name}'. "
+        f"For each spot, provide its name, approximate coordinates [lat, lng] in the world, "
+        f"a short HTML description string (e.g. \"<div style='direction: rtl; text-align: right;'><strong>Name</strong><p>Desc</p></div>\"), "
+        f"and a welcome audio text in Hebrew. "
+        f"Format strictly as a JSON array of objects with keys: name, coords, description, audio_text, image_url (set image_url to null)."
     )
 
     max_retries = 3
     for attempt in range(max_retries):
         try:
+            # שימוש במודל מהיר ומותאם למשימות קלות
             response = client.models.generate_content(
-                model='gemini-3.5-flash', 
+                model='gemini-2.5-flash', 
                 contents=prompt,
             )
             
             if response and response.text:
                 clean_json_str = response.text.strip().replace("```json", "").replace("```", "").strip()
                 spots_list = json.loads(clean_json_str)
-                return spots_list
+                if isinstance(spots_list, list) and len(spots_list) > 0:
+                    return spots_list
                 
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(3) # השהייה של 3 שניות לפני ניסיון חוזר
+                time.sleep(3) # המתנה לפני ניסיון חוזר
                 continue
             else:
-                st.warning(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים או הוסף נקודות באופן ידני.")
+                # Fallback: אם ה-AI נכשל לחלוטין, ננסה לאתר לפחות את מרכז העיר במפה בעזרת Nominatim
+                try:
+                    geolocator = Nominatim(user_agent="travel_app_fallback")
+                    location = geolocator.geocode(city_name)
+                    if location:
+                        lat, lng = location.latitude, location.longitude
+                        return [{
+                            "name": f"מרכז {city_name}",
+                            "coords": [lat, lng],
+                            "description": f"<div style='direction: rtl; text-align: right;'><strong>{city_name}</strong><p>נוצר אוטומטית לפי מרכז העיר עקב עומס בשרתי ה-AI.</p></div>",
+                            "audio_text": f"ברוכים הבאים אל {city_name}",
+                            "image_url": None
+                        }]
+                except:
+                    pass
+                    
+                st.warning(f"⚠️ שרתי ה-AI עמוסים כרגע. תוכל להוסיף נקודות עניין באופן ידני דרך המפה או סרגל הצד.")
     return []
-
 def get_sheets_client():
     if st.session_state.get('force_offline', False):
         return None
