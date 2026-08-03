@@ -745,7 +745,7 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
 
         col_audio, col_status = st.columns([2, 3])
         
-        with col_audio:
+       with col_audio:
             button_label = "🪄 צור תוכן מחדש (עברית וקול באנגלית)" if st.session_state[is_generated_key] else "🪄 הפעל מדריך קולי חכם (צור והשמע)"
             if st.button(button_label, use_container_width=True):
                 with st.spinner("פונה ל-AI לייצור טקסט בעברית וקריינות באנגלית..."):
@@ -757,24 +757,30 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
                             api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
                             client = genai.Client(api_key=api_key)
 
+                            # שימוש במודל ראשי, ואם צריך אפשר לשנות למודל יציב אחר במקרה עומס
+                            model_to_use = 'gemini-3.5-flash'
+
+                            # 1. הפקת טקסט מפורט בעברית למסך
                             prompt_he = (
                                 f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
                                 f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{selected_spot_data['name']}' בעיר '{st.session_state.current_city}'. "
                                 f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
                                 f"כתוב בעברית זורמת, סיפורית וטבעית, ללא תגיות עיצוב או כותרות מלאכותיות."
                             )
-                            res_he = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_he)
+                            res_he = client.models.generate_content(model=model_to_use, contents=prompt_he)
                             he_text = res_he.text.strip() if res_he and res_he.text else f"הגעת אל {selected_spot_data['name']}"
 
+                            # 2. הפקת טקסט באנגלית עבור הקריינות הקולית
                             prompt_en = (
                                 f"You are a professional, warm, and engaging audio tour guide. "
                                 f"Write a rich, detailed, and engaging audio guide script about the site '{selected_spot_data['name']}' in '{st.session_state.current_city}' (about 2-3 short paragraphs). "
                                 f"Focus on history, interesting stories or legends, and notable architectural details. "
                                 f"Write in natural, fluent English suitable for audio narration, without any formatting tags or markdown."
                             )
-                            res_en = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_en)
+                            res_en = client.models.generate_content(model=model_to_use, contents=prompt_en)
                             en_text = res_en.text.strip() if res_en and res_en.text else f"You have arrived at {selected_spot_data['name']}."
 
+                            # שמירה בזיכרון והצלחה
                             st.session_state[hebrew_text_key] = he_text
                             st.session_state[english_audio_key] = en_text
                             st.session_state[is_generated_key] = True
@@ -783,10 +789,10 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
                             
                         except Exception as e:
                             if attempt < max_retries - 1:
-                                time.sleep(2)
+                                time.sleep(4) # ממתין 4 שניות בין ניסיון לניסיון כדי לתת לשרת להתאושש
                                 continue
                             else:
-                                st.error(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים.")
+                                st.error(f"⚠️ שרתי ה-AI חווים עומס חריג כרגע (503). אנא המתן דקה ולחץ שוב על הכפתור.")
                     
                     if success:
                         st.rerun()
