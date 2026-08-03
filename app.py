@@ -41,7 +41,6 @@ def fetch_dynamic_city_spots(city_name):
         f"אל תוסיף שום טקסט מעבר ל-JSON."
     )
 
-    # מנגנון ניסיון חוזר (עד 3 ניסיונות במקרה של שגיאת עומס 503)
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -57,7 +56,7 @@ def fetch_dynamic_city_spots(city_name):
                 
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(2) # השהייה של 2 שניות לפני ניסיון חוזר
+                time.sleep(2)
                 continue
             else:
                 st.warning(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים או הוסף נקודות באופן ידני.")
@@ -745,35 +744,47 @@ if full_main_spots_pool and st.session_state.selected_spot_name:
             button_label = "🪄 צור תוכן מחדש (עברית וקול באנגלית)" if st.session_state[is_generated_key] else "🪄 הפעל מדריך קולי חכם (צור והשמע)"
             if st.button(button_label, use_container_width=True):
                 with st.spinner("פונה ל-AI לייצור טקסט בעברית וקריינות באנגלית..."):
-                    try:
-                        api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-                        client = genai.Client(api_key=api_key)
+                    max_retries = 3
+                    success = False
+                    
+                    for attempt in range(max_retries):
+                        try:
+                            api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+                            client = genai.Client(api_key=api_key)
 
-                        prompt_he = (
-                            f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
-                            f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{selected_spot_data['name']}' בעיר '{st.session_state.current_city}'. "
-                            f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
-                            f"כתוב בעברית זורמת, סיפורית וטבעית, ללא תגיות עיצוב או כותרות מלאכותיות."
-                        )
-                        res_he = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_he)
-                        he_text = res_he.text.strip() if res_he and res_he.text else f"הגעת אל {selected_spot_data['name']}"
+                            prompt_he = (
+                                f"אתה מדריך טיולים קולי מקצועי, חם ומרתק. "
+                                f"כתוב מדריך קולי עשיר, מפורט ומרתק באורך של כ-2 עד 3 פסקאות מלאות על האתר '{selected_spot_data['name']}' בעיר '{st.session_state.current_city}'. "
+                                f"ספר על ההיסטוריה של המקום, סיפורים מעניינים או אגדות הקשורות אליו, ופרטים ארכיטקטוניים בולטים. "
+                                f"כתוב בעברית זורמת, סיפורית וטבעית, ללא תגיות עיצוב או כותרות מלאכותיות."
+                            )
+                            res_he = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_he)
+                            he_text = res_he.text.strip() if res_he and res_he.text else f"הגעת אל {selected_spot_data['name']}"
 
-                        prompt_en = (
-                            f"You are a professional, warm, and engaging audio tour guide. "
-                            f"Write a rich, detailed, and engaging audio guide script about the site '{selected_spot_data['name']}' in '{st.session_state.current_city}' (about 2-3 short paragraphs). "
-                            f"Focus on history, interesting stories or legends, and notable architectural details. "
-                            f"Write in natural, fluent English suitable for audio narration, without any formatting tags or markdown."
-                        )
-                        res_en = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_en)
-                        en_text = res_en.text.strip() if res_en and res_en.text else f"You have arrived at {selected_spot_data['name']}."
+                            prompt_en = (
+                                f"You are a professional, warm, and engaging audio tour guide. "
+                                f"Write a rich, detailed, and engaging audio guide script about the site '{selected_spot_data['name']}' in '{st.session_state.current_city}' (about 2-3 short paragraphs). "
+                                f"Focus on history, interesting stories or legends, and notable architectural details. "
+                                f"Write in natural, fluent English suitable for audio narration, without any formatting tags or markdown."
+                            )
+                            res_en = client.models.generate_content(model='gemini-3.5-flash', contents=prompt_en)
+                            en_text = res_en.text.strip() if res_en and res_en.text else f"You have arrived at {selected_spot_data['name']}."
 
-                        st.session_state[hebrew_text_key] = he_text
-                        st.session_state[english_audio_key] = en_text
-                        st.session_state[is_generated_key] = True
+                            st.session_state[hebrew_text_key] = he_text
+                            st.session_state[english_audio_key] = en_text
+                            st.session_state[is_generated_key] = True
+                            success = True
+                            break
+                            
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                time.sleep(2)
+                                continue
+                            else:
+                                st.error(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים.")
+                    
+                    if success:
                         st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"שגיאה בתקשורת מול ה-AI: {e}")
 
         current_hebrew_text = st.session_state[hebrew_text_key]
         current_english_audio = st.session_state[english_audio_key]
