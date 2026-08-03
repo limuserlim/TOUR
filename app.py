@@ -59,7 +59,8 @@ def fetch_dynamic_city_spots(city_name):
                 time.sleep(2)
                 continue
             else:
-                st.warning(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים או הוסף נקודות באופן ידני.")
+                # מדפיס את השגיאה האמיתית על המסך כדי שנראה מה הבעיה בדיוק
+                st.error(f"❌ שגיאה אמיתית מול ה-AI בניסיון אחרון: {str(e)}")
     return []
 
 def get_sheets_client():
