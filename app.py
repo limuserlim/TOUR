@@ -25,6 +25,36 @@ from google import genai
 # --- הגדרות Google Sheets ---
 SPREADSHEET_ID = "17XwCMZnaXCr6049QYfCf33RoCzrEemQ70hYpccBEFQA"
 
+def fetch_dynamic_city_spots(city_name):
+    """פונה ל-Gemini כדי לקבל באופן דינמי אתרים מרכזיים עבור יעד חדש"""
+    try:
+        api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            return []
+            
+        client = genai.Client(api_key=api_key)
+        
+        prompt = (
+            f"החזר רשימה של 3 עד 5 אתרי חובה תיירותיים מרכזיים בעיר '{city_name}'. "
+            f"עבור כל אתר ציין את השם שלו ואת הקואורדינטות המשוערות (קו רוחב וקו אורך) שלו בעולם. "
+            f"החזר את התשובה **אך ורק** במבנה JSON תקין של רשימת אובייקטים, כך: "
+            f'[{{"name": "שם האתר", "coords": [lat, lng], "description": "<div style=\'direction: rtl; text-align: right;\'><strong>שם האתר</strong><p>תיאור קצר</p></div>", "audio_text": "טקסט ברוכים הבאים", "image_url": null}}]. '
+            f"אל תוסיף שום טקסט מעבר ל-JSON."
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-3.5-flash', 
+            contents=prompt,
+        )
+        
+        if response and response.text:
+            clean_json_str = response.text.strip().replace("```json", "").replace("```", "").strip()
+            spots_list = json.loads(clean_json_str)
+            return spots_list
+    except Exception as e:
+        st.warning(f"לא הצלחנו לייצר נקודות דינמיות אוטומטיות: {e}")
+    return []
+
 def get_sheets_client():
     if st.session_state.get('force_offline', False):
         return None
@@ -384,8 +414,23 @@ def handle_city_change():
     st.session_state.show_dialog_trigger = False
     st.session_state.spots_combo_key += 1
 
+# --- בדיקת עיר סטטית או הפעלת AI דינמי לעיר חדשה ---
+if "dynamic_cities_cache" not in st.session_state:
+    st.session_state.dynamic_cities_cache = {}
+
+if st.session_state.current_city in STANDARD_CITIES_DB:
+    city_data = STANDARD_CITIES_DB[st.session_state.current_city]
+else:
+    if st.session_state.current_city not in st.session_state.dynamic_cities_cache:
+        with st.spinner(f"🌐 מאתר אטרקציות מרכזיות עבור {st.session_state.current_city} באמצעות AI..."):
+            ai_spots = fetch_dynamic_city_spots(st.session_state.current_city)
+            st.session_state.dynamic_cities_cache[st.session_state.current_city] = {
+                "main_spots": ai_spots,
+                "by_the_way": []
+            }
+    city_data = st.session_state.dynamic_cities_cache[st.session_state.current_city]
+
 # --- בניית בריכת הנקודות המלאה עם הגנה על ערים חדשות ---
-city_data = STANDARD_CITIES_DB.get(st.session_state.current_city, {"main_spots": [], "by_the_way": []})
 standard_main_spots = city_data["main_spots"]
 custom_main_spots = st.session_state.custom_spots_dict.get(st.session_state.current_city, [])
 
@@ -439,12 +484,9 @@ with st.sidebar:
     st.markdown("---")
     with st.expander("🛠️ מצב מערכת (Debug)"):
         st.write(f"**יעד נוכחי:** {st.session_state.current_city}")
-        st.write(f"**אתרים סטטיים:** {len(standard_main_spots)}")
+        st.write(f"**אתרים סטטיים/דינמיים:** {len(standard_main_spots)}")
         st.write(f"**נקודות אישיות בענן:** {len(custom_main_spots)}")
         st.write(f"**סה\"כ בריכת נקודות:** {len(full_main_spots_pool)}")
-
-    if not standard_main_spots:
-        st.info("💡 זוהה יעד חדש! השתמש באפשרות למטה כדי להוסיף נקודות עניין ראשונות למסלול.")
 
     if is_planning:
         st.markdown("---")
