@@ -26,33 +26,41 @@ from google import genai
 SPREADSHEET_ID = "17XwCMZnaXCr6049QYfCf33RoCzrEemQ70hYpccBEFQA"
 
 def fetch_dynamic_city_spots(city_name):
-    """פונה ל-Gemini כדי לקבל באופן דינמי אתרים מרכזיים עבור יעד חדש"""
-    try:
-        api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
-            return []
+    """פונה ל-Gemini לקבלת אתרים דינמיים, עם מנגנון ניסיון חוזר (Retry) במקרה של עומס"""
+    api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        return []
+        
+    client = genai.Client(api_key=api_key)
+    
+    prompt = (
+        f"החזר רשימה של 3 עד 5 אתרי חובה תיירותיים מרכזיים בעיר '{city_name}'. "
+        f"עבור כל אתר ציין את השם שלו ואת הקואורדינטות המשוערות (קו רוחב וקו אורך) שלו בעולם. "
+        f"החזר את התשובה **אך ורק** במבנה JSON תקין של רשימת אובייקטים, כך: "
+        f'[{{"name": "שם האתר", "coords": [lat, lng], "description": "<div style=\'direction: rtl; text-align: right;\'><strong>שם האתר</strong><p>תיאור קצר</p></div>", "audio_text": "טקסט ברוכים הבאים", "image_url": null}}]. '
+        f"אל תוסיף שום טקסט מעבר ל-JSON."
+    )
+
+    # מנגנון ניסיון חוזר (עד 3 ניסיונות במקרה של שגיאת עומס 503)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-3.5-flash', 
+                contents=prompt,
+            )
             
-        client = genai.Client(api_key=api_key)
-        
-        prompt = (
-            f"החזר רשימה של 3 עד 5 אתרי חובה תיירותיים מרכזיים בעיר '{city_name}'. "
-            f"עבור כל אתר ציין את השם שלו ואת הקואורדינטות המשוערות (קו רוחב וקו אורך) שלו בעולם. "
-            f"החזר את התשובה **אך ורק** במבנה JSON תקין של רשימת אובייקטים, כך: "
-            f'[{{"name": "שם האתר", "coords": [lat, lng], "description": "<div style=\'direction: rtl; text-align: right;\'><strong>שם האתר</strong><p>תיאור קצר</p></div>", "audio_text": "טקסט ברוכים הבאים", "image_url": null}}]. '
-            f"אל תוסיף שום טקסט מעבר ל-JSON."
-        )
-        
-        response = client.models.generate_content(
-            model='gemini-3.5-flash', 
-            contents=prompt,
-        )
-        
-        if response and response.text:
-            clean_json_str = response.text.strip().replace("```json", "").replace("```", "").strip()
-            spots_list = json.loads(clean_json_str)
-            return spots_list
-    except Exception as e:
-        st.warning(f"לא הצלחנו לייצר נקודות דינמיות אוטומטיות: {e}")
+            if response and response.text:
+                clean_json_str = response.text.strip().replace("```json", "").replace("```", "").strip()
+                spots_list = json.loads(clean_json_str)
+                return spots_list
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(2) # השהייה של 2 שניות לפני ניסיון חוזר
+                continue
+            else:
+                st.warning(f"⚠️ שרתי ה-AI עמוסים כרגע (שגיאה 503). אנא נסה שוב בעוד מספר רגעים או הוסף נקודות באופן ידני.")
     return []
 
 def get_sheets_client():
