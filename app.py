@@ -420,6 +420,7 @@ def handle_city_change():
     st.session_state.spots_combo_key += 1
 
 # --- בדיקת עיר סטטית או הפעלת AI דינמי לעיר חדשה ---
+# --- בדיקת עיר סטטית או הפעלת AI דינמי לעיר חדשה (עם הגנה על המפה) ---
 if "dynamic_cities_cache" not in st.session_state:
     st.session_state.dynamic_cities_cache = {}
 
@@ -429,8 +430,9 @@ else:
     if st.session_state.current_city not in st.session_state.dynamic_cities_cache:
         with st.spinner(f"🌐 מאתר אטרקציות מרכזיות עבור {st.session_state.current_city} באמצעות AI..."):
             ai_spots = fetch_dynamic_city_spots(st.session_state.current_city)
+            # גם אם ה-AI נכשל והחזיר רשימה ריקה, נשמור מבנה ריק כדי שהמפה לא תיפול
             st.session_state.dynamic_cities_cache[st.session_state.current_city] = {
-                "main_spots": ai_spots,
+                "main_spots": ai_spots if ai_spots else [],
                 "by_the_way": []
             }
     city_data = st.session_state.dynamic_cities_cache[st.session_state.current_city]
